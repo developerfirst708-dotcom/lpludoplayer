@@ -1,0 +1,33 @@
+{
+  "name": "lpludo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "1v1 Ludo battle platform — MERN + Tailwind + Redis rebuild of the reference app (local-first)",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "infra:up": "mkdir -p .data/mongo .data/redis && docker compose -f docker-compose.dev.yml up -d --wait && npm run db:init",
+    "infra:down": "docker compose -f docker-compose.dev.yml down",
+    "infra:logs": "docker compose -f docker-compose.dev.yml logs -f mongo redis",
+    "infra:reset": "docker compose -f docker-compose.dev.yml down -v && rm -rf .data && npm run infra:up",
+    "dev": "concurrently -n api,web,admin -c blue,green,magenta \"npm:dev:api\" \"npm:dev:web\" \"npm:dev:admin\"",
+    "dev:api": "npm run dev -w @lpludo/api",
+    "dev:web": "npm run dev -w @lpludo/web",
+    "dev:admin": "npm run dev -w @lpludo/admin",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test -w @lpludo/shared && npm run test -w @lpludo/api",
+    "lint": "npm run lint --workspaces --if-present",
+    "db:init": "npm run db:init -w @lpludo/api",
+    "db:indexes": "npm run db:indexes -w @lpludo/api",
+    "seed": "npm run seed -w @lpludo/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

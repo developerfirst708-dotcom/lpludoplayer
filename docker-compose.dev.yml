@@ -1,0 +1,61 @@
+name: lpludo-dev
+
+# Local-only infra for the LPLUDO monorepo.
+# - Mongo runs as a SINGLE-NODE REPLICA SET because `withTransaction` (the core
+#   fix for the reference project's money bugs) refuses to work on a standalone.
+# - Port 27018 (not 27017) so this never collides with any pre-existing local Mongo.
+# - Replica-set member is registered as localhost:27018 so the API can run
+#   directly on the host (no container needed) and still resolve the member.
+
+services:
+  mongo:
+    image: mongo:8
+    container_name: lpludo-mongo
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--port", "27018"]
+    user: "1000:1000"
+    ports:
+      - "27018:27018"
+    volumes:
+      - ./.data/mongo:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--port", "27018", "--eval", "db.adminCommand({ ping: 1 }).ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+
+  mongo-init:
+    image: mongo:8
+    container_name: lpludo-mongo-init
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - bash
+      - -c
+      - |
+        mongosh --host mongo:27018 --quiet --eval '
+          try {
+            const s = rs.status();
+            if (s && s.ok) { print("replica set rs0 already initialised"); quit(0); }
+          } catch (e) { /* not initiated yet -> fall through */ }
+          rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "localhost:27018" }] });
+          print("replica set rs0 initiated on localhost:27018");
+        '
+
+  redis:
+    image: redis:7-alpine
+    container_name: lpludo-redis
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    user: "1000:1000"
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./.data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 5s

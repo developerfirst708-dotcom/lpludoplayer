@@ -1,0 +1,32 @@
+# dependencies / builds
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# env & secrets — never commit real values
+.env
+.env.*
+!.env.example
+
+# local infra data (mongo + redis live here while developing)
+.data/
+
+# local file storage for battle screenshots / kyc docs (PII — never commit)
+apps/api/.local-storage*/
+
+# local agent/tooling state (Command Code permissions + learned taste)
+.commandcode/
+
+# logs & OS noise
+*.log
+.DS_Store
+
+# reference project: contains real secrets + PII from the original app,
+# so it must never be committed into this repo
+refrence_project/
+
+# analysis of that legacy app (its bugs, schemas and admin account) — kept
+# local because this repository is public
+REFERENCE_PROJECT_ANALYSIS.md

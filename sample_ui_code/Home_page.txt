@@ -1,0 +1,192 @@
+<!DOCTYPE html><html lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+<title>Ludo Realm - Mobile Dashboard</title>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Custom Font -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet">
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            brandYellow: {
+              300: '#FDE047',
+              400: '#FACC15',
+              500: '#F5B82E',
+              600: '#EAB308',
+            },
+            gameBg: '#090B10',
+          },
+          boxShadow: {
+            'card': '0 4px 20px -2px rgba(0, 0, 0, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.04)',
+            'btn-gold': '0 2px 4px rgba(245, 184, 46, 0.25)',
+          }
+        }
+      }
+    }
+  </script>
+<!-- BEGIN: Custom Styles -->
+<style data-purpose="base-styling">
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+  </style>
+<style data-purpose="card-overlays">
+    /* Deep space background effect with subtle stars/sparkles overlay */
+    .game-thumb-container {
+      background: radial-gradient(circle at center top, #192038 0%, #06070B 75%);
+      position: relative;
+      overflow: hidden;
+    }
+    .game-thumb-container::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: 
+        radial-gradient(1px 1px at 20px 30px, #ffffff, rgba(0,0,0,0)),
+        radial-gradient(1.5px 1.5px at 60px 80px, #ffffff, rgba(0,0,0,0)),
+        radial-gradient(1px 1px at 120px 40px, #ffffff, rgba(0,0,0,0)),
+        radial-gradient(1.5px 1.5px at 180px 110px, #ffffff, rgba(0,0,0,0)),
+        radial-gradient(1px 1px at 250px 25px, #ffffff, rgba(0,0,0,0)),
+        radial-gradient(1.5px 1.5px at 300px 90px, #ffffff, rgba(0,0,0,0)),
+        radial-gradient(1px 1px at 340px 45px, #ffffff, rgba(0,0,0,0));
+      background-repeat: repeat;
+      background-size: 350px 200px;
+      opacity: 0.65;
+      pointer-events: none;
+    }
+  </style>
+<!-- END: Custom Styles -->
+</head>
+<body class="bg-gray-100 flex justify-center min-h-screen text-slate-800">
+<!-- BEGIN: Mobile Device Frame -->
+<main class="w-full max-w-[430px] bg-white min-h-screen pb-10 shadow-2xl relative flex flex-col" data-purpose="app-shell">
+<!-- BEGIN: Device StatusBar -->
+
+<!-- END: Device StatusBar -->
+<!-- BEGIN: Top Navigation Header -->
+<section class="px-5 py-2.5 flex items-center justify-between" data-purpose="app-header">
+<!-- LR Monogram Logo with Crown -->
+<div class="relative flex items-center justify-center">
+<!-- Circular black container -->
+<div class="w-12 h-12 rounded-full bg-black border border-neutral-700 flex items-center justify-center shadow-md relative overflow-hidden">
+<!-- Mini Crown illustration on top of monogram -->
+<svg class="w-4 h-3 text-[#F5B82E] absolute top-1.5" fill="currentColor" viewBox="0 0 24 16">
+<polygon points="12 2 15.5 8 21 3 18.5 13 5.5 13 3 3 8.5 8"></polygon>
+</svg>
+<!-- 'LR' stylized monogram -->
+<span class="text-white font-extrabold text-xl tracking-tight mt-2 font-serif">LR</span>
+</div>
+</div>
+<!-- Wallet Balance Pill -->
+<div class="flex items-center border-2 border-[#F6C64D] rounded-full px-3.5 py-1 bg-white shadow-sm space-x-2">
+<!-- Gold Coin Icon with Rupee -->
+<div class="w-5 h-5 rounded-full bg-gradient-to-br from-[#FBD452] via-[#F4B224] to-[#C98509] flex items-center justify-center shadow-inner text-white font-bold text-xs">
+          ₹
+        </div>
+<!-- Balance value -->
+<span class="font-bold text-gray-900 text-sm tracking-wide">0</span>
+</div>
+</section>
+<!-- END: Top Navigation Header -->
+<!-- Content Wrapper -->
+<div class="px-4 space-y-4 pt-1">
+<!-- BEGIN: Referral Banner -->
+<section class="rounded-xl p-3.5 bg-gradient-to-b from-[#FEF4BA] via-[#FDE88C] to-[#FCD95B] border border-[#FAD655] shadow-sm flex items-center space-x-3" data-purpose="promo-banner">
+<!-- 3D Gift Icon -->
+<div class="relative flex-shrink-0 w-10 h-10 flex items-center justify-center">
+<svg class="w-9 h-9 filter drop-shadow-sm" fill="none" viewBox="0 0 48 48">
+<!-- Box Body -->
+<rect fill="#F8A725" height="24" rx="3" stroke="#333" stroke-width="2.5" width="36" x="6" y="18"></rect>
+<!-- Box Lid -->
+<rect fill="#FDBF38" height="8" rx="2" stroke="#333" stroke-width="2.5" width="40" x="4" y="12"></rect>
+<!-- Vertical Ribbon -->
+<rect fill="#EC4899" height="30" stroke="#333" stroke-width="2" width="6" x="21" y="12"></rect>
+<!-- Bows -->
+<path d="M21 12C17 6 10 7 12 12C15 12 19 12 21 12Z" fill="#F472B6" stroke="#333" stroke-width="2"></path>
+<path d="M27 12C31 6 38 7 36 12C33 12 29 12 27 12Z" fill="#F472B6" stroke="#333" stroke-width="2"></path>
+</svg>
+</div>
+<!-- Banner Text -->
+<div class="flex-1">
+<p class="text-[13.5px] leading-snug font-extrabold text-neutral-950 tracking-tight">
+            Refer and Earn 5% Commission Lifetime!!
+          </p>
+</div>
+</section>
+<!-- END: Referral Banner -->
+<!-- BEGIN: Games Header Bar -->
+<div class="flex items-center justify-between pt-1 px-1" data-purpose="section-title">
+<!-- Title with Info button -->
+<div class="flex items-center space-x-2">
+<h2 class="text-2xl font-black text-[#1E232A] tracking-tight">Games</h2>
+<!-- Info Circle -->
+<div class="w-4 h-4 rounded-full bg-gray-500 text-white flex items-center justify-center text-[10px] font-serif font-bold italic opacity-75">
+            i
+          </div>
+</div>
+<!-- Live Status Counter -->
+
+</div>
+<!-- END: Games Header Bar -->
+<!-- BEGIN: Game Card 1 (Classic Web Ludo) -->
+<article class="rounded-2xl overflow-hidden shadow-card border border-gray-100 bg-white" data-purpose="game-card">
+<!-- Card Visual/Banner -->
+<div class="game-thumb-container h-44 w-full flex items-center justify-center relative">
+<!-- Trending Badge -->
+
+<!-- 3D Ludo Graphic Asset Cropped to Showcase Board and Dice -->
+<div class="w-full h-full flex items-center justify-center overflow-hidden">
+<img alt="Classic Web Ludo Game Board" class="w-[78%] max-h-[175px] object-contain object-top drop-shadow-2xl translate-y-1 transform scale-110 pointer-events-none" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB6PZeflmqjmvEqaZZC_WGBeShWaOcMkAU15eVZyqklzD9vZJI-VthtJBE8ffg6GMT1cZdp7ZuRfVj_9gyCuTzyEdQCE-7K02Z_202XRLPfyCp2vIj7h2ZkyCyA-2qn121sxKuOrOkXhAWAA135j7YZU7iLufiaPTVCgxBPbIdCqd1alWEgCXNcOOpH9PBlFgyobpZxtgh2VpNvgtC1vNMumNA4pYtkqRIU70iC9RGECmmhnkzQu8NBsDZUd4oigYkKOKE">
+</div>
+</div>
+<!-- Card Footer Info & CTA -->
+<div class="px-4 py-3.5 flex items-center justify-between bg-white border-t border-gray-50">
+<div class="space-y-0.5">
+<h3 class="text-lg font-black text-[#111827] tracking-tight">Classic Web Ludo</h3>
+<p class="text-xs font-semibold text-gray-500">Play the Most Popular Ludo Game Format</p>
+</div>
+<!-- Play Now Button -->
+<button class="bg-[#F5B82E] hover:bg-[#E5A81E] active:scale-95 transition-all text-neutral-900 font-extrabold text-xs px-5 py-2.5 rounded-full shadow-btn-gold tracking-normal flex-shrink-0" type="button">
+            Play Now
+          </button>
+</div>
+</article>
+<!-- END: Game Card 1 -->
+<!-- BEGIN: Game Card 2 (Classic App Ludo) -->
+<article class="rounded-2xl overflow-hidden shadow-card border border-gray-100 bg-white" data-purpose="game-card">
+<!-- Card Visual/Banner -->
+<div class="game-thumb-container h-44 w-full flex items-center justify-center relative">
+<!-- 3D Ludo Graphic Asset -->
+<div class="w-full h-full flex items-center justify-center overflow-hidden">
+<img alt="Classic App Ludo King Mode" class="w-[78%] max-h-[175px] object-contain object-top drop-shadow-2xl translate-y-1 transform scale-110 pointer-events-none" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAXz4bqOo4okurRGFMwJbVUVRbzS8pesfBNCgoiTaxdClyrPBajxGTP8dEC3vaX5_8Tt8CAdv0qf3h3GRWHUQpPkjKYCI25IOnX1Y0C8SdWRRePiH1Q98WJjVvxyNVyQbzoJbGH1R8C3DAmgXz8hf5neX_CkYQapPTaKz2glAFfJ818rij2uSmllkuL0WhoAO2LqAyo-zY99QcxSmlH4K72djal8ddSnby0NYiIiFBvD0gC4teagTRvK5iD9Hl3Sc_nw7U">
+</div>
+</div>
+<!-- Card Footer Info & CTA -->
+<div class="px-4 py-3.5 flex items-center justify-between bg-white border-t border-gray-50">
+<div class="space-y-0.5">
+<h3 class="text-lg font-black text-[#111827] tracking-tight">Classic App Ludo</h3>
+<p class="text-xs font-semibold text-gray-500">Ludo King Mode is now Available!</p>
+</div>
+<!-- Play Now Button -->
+<button class="bg-[#F5B82E] hover:bg-[#E5A81E] active:scale-95 transition-all text-neutral-900 font-extrabold text-xs px-5 py-2.5 rounded-full shadow-btn-gold tracking-normal flex-shrink-0" type="button">Comming Soon</button>
+</div>
+</article>
+<!-- END: Game Card 2 -->
+</div>
+<!-- END: Content Wrapper -->
+</main>
+<!-- END: Mobile Device Frame -->
+
+
+</body></html>

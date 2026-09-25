@@ -1,0 +1,21 @@
+{
+  "name": "@lpludo/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./money": "./src/money.js",
+    "./prize": "./src/prize.js",
+    "./contestStates": "./src/contestStates.js",
+    "./errors": "./src/errors.js",
+    "./schemas": "./src/schemas/index.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  }
+}
