@@ -13,6 +13,7 @@ coverage/
 # local infra data (mongo + redis live here while developing)
 .data/
 
+sample_ui_code
 # local file storage for battle screenshots / kyc docs (PII — never commit)
 apps/api/.local-storage*/
 
@@ -26,6 +27,7 @@ apps/api/.local-storage*/
 # reference project: contains real secrets + PII from the original app,
 # so it must never be committed into this repo
 refrence_project/
+.refrence_project/
 
 # analysis of that legacy app (its bugs, schemas and admin account) — kept
 # local because this repository is public
