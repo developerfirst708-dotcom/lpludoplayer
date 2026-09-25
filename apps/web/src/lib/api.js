@@ -31,8 +31,15 @@ export function setAccessToken(token) {
   accessToken = token;
 }
 
+/**
+ * Origin of the API. In production this is the API's own domain
+ * (Cloudflare Pages → Settings → Environment variables: VITE_API_URL).
+ * Left empty for local dev, where vite.config.js proxies /api to :5000.
+ */
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
+
 export function api(path, { method = "GET", body, headers, ...rest } = {}) {
-  return fetch(`/api${path}`, {
+  return fetch(`${API_BASE}/api${path}`, {
     method,
     headers: {
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
@@ -49,7 +56,7 @@ export function api(path, { method = "GET", body, headers, ...rest } = {}) {
 export function apiUpload(path, file, kind = "battle") {
   const form = new FormData();
   form.append("file", file);
-  return fetch(`/api${path}?kind=${kind}`, {
+  return fetch(`${API_BASE}/api${path}?kind=${kind}`, {
     method: "POST",
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
     body: form,

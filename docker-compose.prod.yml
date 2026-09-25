@@ -1,0 +1,73 @@
+name: lpludo-prod
+
+# Production infra for a single VPS (MongoDB replica set + Redis).
+#
+# Both services are published on 127.0.0.1 ONLY — they are not reachable from
+# the internet, which is exactly what you want: an exposed Redis or Mongo port
+# is found and abused by scanners within minutes. The API runs on the host and
+# reaches them over localhost.
+#
+# Do NOT use docker-compose.dev.yml on a server: it publishes 27018/6379 on all
+# interfaces. It is for local development only.
+#
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# MongoDB still runs as a SINGLE-NODE REPLICA SET because every money mutation
+# uses `withTransaction`, which a standalone mongod cannot serve.
+
+services:
+  mongo:
+    image: mongo:8
+    container_name: lpludo-mongo
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--port", "27018"]
+    user: "1000:1000"
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27018:27018"
+    volumes:
+      - ./.data/mongo:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--port", "27018", "--eval", "db.adminCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  mongo-init:
+    image: mongo:8
+    container_name: lpludo-mongo-init
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - bash
+      - -c
+      - |
+        mongosh --host mongo:27018 --quiet --eval '
+          try {
+            const s = rs.status();
+            if (s && s.ok) { print("replica set rs0 already initialised"); quit(0); }
+          } catch (e) { /* not initiated yet -> fall through */ }
+          rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "localhost:27018" }] });
+          print("replica set rs0 initiated on localhost:27018");
+        '
+
+  redis:
+    image: redis:7-alpine
+    # add `--requirepass <password>` here (and in apps/api/.env REDIS_URL) if you
+    # want auth as a second layer behind the localhost-only binding
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    container_name: lpludo-redis
+    user: "1000:1000"
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - ./.data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
