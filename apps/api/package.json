@@ -10,6 +10,7 @@
     "db:init": "node src/scripts/db.init.js",
     "db:indexes": "node src/scripts/db.indexes.js",
     "seed": "node src/scripts/seed.js",
+    "admin:password": "node src/scripts/admin.password.js",
     "imb:smoke": "node src/scripts/imb.smoke.js",
     "test": "node --test --test-concurrency=1 test/*.test.js"
   },

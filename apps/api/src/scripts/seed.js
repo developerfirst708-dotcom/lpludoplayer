@@ -55,31 +55,35 @@ export async function seed() {
   // ---- demo players (₹500 each) so battles can be played immediately ----
   // Credited THROUGH THE LEDGER (like any deposit) so reconciliation drift
   // stays exactly 0 — a bare Wallet.create would break the invariant.
-  const { applyLedger } = await import("../services/ledger.service.js");
-  const { withTransaction } = await import("../db/connect.js");
-  const demo = [
-    { phone: "9999000001", name: "DemoA", amount: 50000 },
-    { phone: "9999000002", name: "DemoB", amount: 50000 },
-  ];
-  for (const d of demo) {
-    let u = await User.findOne({ phone: d.phone });
-    if (!u) {
-      u = new User({ phone: d.phone, name: d.name, role: "player" });
-      u.referral = { code: "LP" + d.phone.slice(-4) + "X" };
-      await u.save();
-      await withTransaction(async (session) => {
-        await applyLedger({
-          session,
-          userId: u._id,
-          amount: d.amount,
-          type: "deposit",
-          refType: "system",
-          refId: u._id,
-          note: "Welcome balance (seed)",
-          idempotencyKey: `seed:${d.phone}`,
+  // NEVER on a production database: that would mint play money for two phone
+  // numbers and pollute the real ledger.
+  if (env.NODE_ENV !== "production") {
+    const { applyLedger } = await import("../services/ledger.service.js");
+    const { withTransaction } = await import("../db/connect.js");
+    const demo = [
+      { phone: "9999000001", name: "DemoA", amount: 50000 },
+      { phone: "9999000002", name: "DemoB", amount: 50000 },
+    ];
+    for (const d of demo) {
+      let u = await User.findOne({ phone: d.phone });
+      if (!u) {
+        u = new User({ phone: d.phone, name: d.name, role: "player" });
+        u.referral = { code: "LP" + d.phone.slice(-4) + "X" };
+        await u.save();
+        await withTransaction(async (session) => {
+          await applyLedger({
+            session,
+            userId: u._id,
+            amount: d.amount,
+            type: "deposit",
+            refType: "system",
+            refId: u._id,
+            note: "Welcome balance (seed)",
+            idempotencyKey: `seed:${d.phone}`,
+          });
         });
-      });
-      l.info({ phone: d.phone, bonusPaise: d.amount }, "demo player created");
+        l.info({ phone: d.phone, bonusPaise: d.amount }, "demo player created");
+      }
     }
   }
 
