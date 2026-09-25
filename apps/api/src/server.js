@@ -32,6 +32,9 @@ async function main() {
     } else {
       l.warn("IMB Pay instant deposits OFF (IMB_API_TOKEN empty) — manual UPI/UTR serves every amount");
     }
+    if (!env.ALLOW_DEV_OTP && !env.MERAOTP_API_KEY) {
+      l.warn("MeraOTP key missing (MERAOTP_API_KEY) — login OTPs CANNOT be delivered");
+    }
   });
 }
 
