@@ -96,7 +96,10 @@ if (process.argv[1] && process.argv[1].endsWith("seed.js")) {
   try {
     await connectMongo();
     const out = await seed();
-    console.log(`✔ seed ok — admin ${out.admin} ready; demo players 9999000001 / 9999000002 (₹500 each)`);
+    const demoNote = env.NODE_ENV === "production"
+      ? "demo players skipped (production)"
+      : "demo players 9999000001 / 9999000002 (₹500 each)";
+    console.log(`✔ seed ok — admin ${out.admin} ready; ${demoNote}`);
     process.exit(0);
   } catch (err) {
     console.error("✖ seed failed:", err.message);

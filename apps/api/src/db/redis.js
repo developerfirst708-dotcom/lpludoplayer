@@ -27,7 +27,9 @@ function ensureConnected(client) {
 export async function connectRedis() {
   await ensureConnected(redis);
   await ensureConnected(redisSub);
-  l.info({ url: env.REDIS_URL }, "redis connected");
+  // never log credentials: REDIS_URL can carry a password (`redis://:pw@host`)
+  const safeUrl = env.REDIS_URL.replace(/\/\/[^@/]*@/, "//<creds>@");
+  l.info({ url: safeUrl }, "redis connected");
   return redis;
 }
 
