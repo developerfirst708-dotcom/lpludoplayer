@@ -68,7 +68,7 @@ export default function Login() {
               label="Mobile number"
               inputMode="numeric"
               autoComplete="tel"
-              placeholder="10-digit mobile"
+              placeholder="Enter mobile no."
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
