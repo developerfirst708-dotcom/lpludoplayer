@@ -58,7 +58,7 @@ export default function Login() {
       <div className="flex flex-col items-center gap-2 text-center">
         <Monogram className="scale-110" />
         <h1 className="mt-2 text-3xl font-black tracking-tight text-ink">WELCOME</h1>
-        <p className="text-sm font-semibold text-slate-500">welcome to LPludoplayer</p>
+        <p className="text-sm font-semibold text-slate-500">LP ludoplayer</p>
       </div>
 
       <Card className="p-5">
@@ -109,7 +109,7 @@ export default function Login() {
       </Card>
 
       <p className="text-center text-[11px] font-semibold text-slate-400">
-        New players get a unique 5-letter player code automatically — no name to choose.
+        By continuing you agree to our Terms & Conditions and Privacy Policy
       </p>
     </div>
   );
