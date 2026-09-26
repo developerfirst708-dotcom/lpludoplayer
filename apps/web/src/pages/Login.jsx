@@ -57,7 +57,7 @@ export default function Login() {
     <div className="flex min-h-screen flex-col justify-center gap-6 px-6 py-10">
       <div className="flex flex-col items-center gap-2 text-center">
         <Monogram className="scale-110" />
-        <h1 className="mt-2 text-3xl font-black tracking-tight text-ink">WELCOME BACK</h1>
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-ink">WELCOME</h1>
         <p className="text-sm font-semibold text-slate-500">welcome to LPludoplayer</p>
       </div>
 
