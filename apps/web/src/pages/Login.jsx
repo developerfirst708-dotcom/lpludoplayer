@@ -4,8 +4,62 @@ import { phoneSchema } from "@lpludo/shared/schemas"; // same zod schema as the 
 import { useToast } from "../components/Toast.jsx";
 import { Button, Card, Input } from "../components/ui.jsx";
 
-// Import your exact image file directly into the code
-import lpLogo from "../assets/lp-logo.png";
+/**
+ * Exact LP Crown Logo embedded directly as a React SVG component.
+ */
+function LpLogo({ className = "w-28 h-28" }) {
+  return (
+    <svg
+      viewBox="0 0 200 200"
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        {/* Gold Crown Gradient */}
+        <linearGradient id="lpGoldCrown" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FDE047" />
+          <stop offset="40%" stopColor="#EAB308" />
+          <stop offset="100%" stopColor="#CA8A04" />
+        </linearGradient>
+      </defs>
+
+      {/* Outer White Border Ring */}
+      <circle cx="100" cy="100" r="96" fill="none" stroke="#FFFFFF" strokeWidth="4" />
+      
+      {/* Inner Black Circle Background */}
+      <circle cx="100" cy="100" r="92" fill="#0A0A0A" stroke="#FFFFFF" strokeWidth="3" />
+
+      {/* Gold Crown */}
+      <g transform="translate(0, 5)">
+        <path
+          d="M 68,64 L 78,42 L 89,53 L 100,32 L 111,53 L 122,42 L 132,64 Z"
+          fill="url(#lpGoldCrown)"
+        />
+        {/* Crown Base Strip */}
+        <path
+          d="M 68,66 C 78,69 122,69 132,66 L 132,69 C 122,72 78,72 68,69 Z"
+          fill="url(#lpGoldCrown)"
+        />
+        {/* Crown Jewels/Balls */}
+        <circle cx="78" cy="40" r="3.5" fill="url(#lpGoldCrown)" />
+        <circle cx="100" cy="30" r="4" fill="url(#lpGoldCrown)" />
+        <circle cx="122" cy="40" r="3.5" fill="url(#lpGoldCrown)" />
+      </g>
+
+      {/* Bold White LP Monogram */}
+      <g fill="#FFFFFF" transform="translate(0, 10)">
+        {/* Letter L */}
+        <path d="M 48,70 H 62 V 126 C 62,133 67,138 74,138 H 82 V 150 H 70 C 58,150 48,140 48,128 Z" />
+        
+        {/* Letter P */}
+        <path d="M 88,70 H 132 C 146,70 154,78 154,92 C 154,106 146,114 132,114 H 102 V 150 H 88 Z M 102,82 V 102 H 130 C 137,102 140,98 140,92 C 140,86 137,82 130,82 Z" />
+        
+        {/* Bottom Bar Segment */}
+        <rect x="96" y="138" width="56" height="12" rx="2" />
+      </g>
+    </svg>
+  );
+}
 
 /**
  * Login — mobile + OTP only. The display name is no longer collected here:
@@ -58,12 +112,8 @@ export default function Login() {
   return (
     <div className="flex min-h-screen flex-col justify-center gap-6 px-6 py-10">
       <div className="flex flex-col items-center gap-2 text-center">
-        {/* Exact LP Logo component */}
-        <img
-          src={lpLogo}
-          alt="LP Ludo Logo"
-          className="h-28 w-28 object-contain"
-        />
+        {/* Embedded Logo Component */}
+        <LpLogo className="h-28 w-28 drop-shadow-md" />
         <h1 className="mt-2 text-3xl font-black tracking-tight text-ink">WELCOME</h1>
         <p className="text-sm font-semibold text-slate-500">LP ludoplayer</p>
       </div>
