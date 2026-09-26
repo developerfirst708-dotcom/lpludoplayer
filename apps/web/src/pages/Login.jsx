@@ -4,12 +4,13 @@ import { phoneSchema } from "@lpludo/shared/schemas"; // same zod schema as the 
 import { useToast } from "../components/Toast.jsx";
 import { Button, Card, Input } from "../components/ui.jsx";
 
-// Base64 Data URL for the exact LP logo image
-const LP_LOGO_IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABLAAAASwCAYAAADr/yqEAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEwAACxMBAJqcGAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAP+SURBVHhe7333m13Xed95L4oAETkHMxAMBEEkiEACBBmJpCiRsiWJsmxLthzbsl3/mZnZnf/G9rz/2u99X+
-...`; // Place exact Data URL here
+// Import your exact image file directly into the code
+import lpLogo from "../assets/lp-logo.png";
 
 /**
- * Login — mobile + OTP only.
+ * Login — mobile + OTP only. The display name is no longer collected here:
+ * every new player is given a unique 5-letter code by the server on first
+ * login (see apps/api/src/services/auth.service.js).
  */
 export default function Login() {
   const toast = useToast();
@@ -57,11 +58,11 @@ export default function Login() {
   return (
     <div className="flex min-h-screen flex-col justify-center gap-6 px-6 py-10">
       <div className="flex flex-col items-center gap-2 text-center">
-        {/* Exact Logo directly embedded */}
+        {/* Exact LP Logo component */}
         <img
-          src={LP_LOGO_IMAGE}
+          src={lpLogo}
           alt="LP Ludo Logo"
-          className="h-28 w-28 object-contain drop-shadow-md"
+          className="h-28 w-28 object-contain"
         />
         <h1 className="mt-2 text-3xl font-black tracking-tight text-ink">WELCOME</h1>
         <p className="text-sm font-semibold text-slate-500">LP ludoplayer</p>
