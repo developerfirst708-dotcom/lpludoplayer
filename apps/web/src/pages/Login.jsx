@@ -3,7 +3,6 @@ import { sendOtp, verifyOtp } from "../lib/auth.js";
 import { phoneSchema } from "@lpludo/shared/schemas"; // same zod schema as the server (S11)
 import { useToast } from "../components/Toast.jsx";
 import { Button, Card, Input } from "../components/ui.jsx";
-import { Monogram } from "../components/art.jsx";
 
 /**
  * Login — mobile + OTP only. The display name is no longer collected here:
@@ -56,7 +55,11 @@ export default function Login() {
   return (
     <div className="flex min-h-screen flex-col justify-center gap-6 px-6 py-10">
       <div className="flex flex-col items-center gap-2 text-center">
-        <Monogram className="scale-110" />
+        <img
+          src="/logo.png"
+          alt="LP Ludo Logo"
+          className="h-24 w-24 object-contain"
+        />
         <h1 className="mt-2 text-3xl font-black tracking-tight text-ink">WELCOME</h1>
         <p className="text-sm font-semibold text-slate-500">LP ludoplayer</p>
       </div>
