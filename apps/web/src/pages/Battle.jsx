@@ -8,6 +8,9 @@ import { formatPaise } from "@lpludo/shared";
 import { useToast } from "../components/Toast.jsx";
 import { Button, Empty, Input, Panel, Skeleton, StatusBadge } from "../components/ui.jsx";
 
+/** statuses that belong in the lobby's "Running Battles" list */
+const RUNNING_STATUSES = ["join_requested", "running", "room_submitted", "result_submitted", "cancel_requested"];
+
 export default function Battle() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -33,7 +36,7 @@ export default function Battle() {
   // 1. Fetch Open Battles (Active when in Lobby View)
   const openContestsQuery = useQuery({
     queryKey: ["contests", "open"],
-    queryFn: () => api("/contests?status=open").then((r) => r.contests || []),
+    queryFn: () => api("/contests/open").then((r) => r.items || []),
     enabled: !id,
     refetchInterval: 10_000,
   });
@@ -41,7 +44,10 @@ export default function Battle() {
   // 2. Fetch Running Battles (Active when in Lobby View)
   const runningContestsQuery = useQuery({
     queryKey: ["contests", "running"],
-    queryFn: () => api("/contests?status=running").then((r) => r.contests || []),
+    queryFn: () =>
+      api("/contests/mine").then((r) =>
+        (r.items || []).filter((c) => RUNNING_STATUSES.includes(c.status))
+      ),
     enabled: !id,
     refetchInterval: 10_000,
   });
@@ -63,6 +69,9 @@ export default function Battle() {
     function watch() {
       if (id) {
         socket.emit("watch:contest", { contestId: id }, () => {});
+      } else {
+        // lobby view: subscribe to the open-battles room for live list changes
+        socket.emit("subscribe:contests", {}, () => {});
       }
     }
 
@@ -76,6 +85,7 @@ export default function Battle() {
 
     socket.on("connect", watch);
     socket.on("contest:updated", handleUpdate);
+    socket.on("contest:list-changed", handleUpdate);
     socket.on("contest:created", handleUpdate);
 
     watch();
@@ -83,6 +93,7 @@ export default function Battle() {
     return () => {
       socket.off("connect", watch);
       socket.off("contest:updated", handleUpdate);
+      socket.off("contest:list-changed", handleUpdate);
       socket.off("contest:created", handleUpdate);
     };
   }, [id, qc]);
@@ -420,7 +431,7 @@ export default function Battle() {
 
         {/* Back Link */}
         <div className="text-center pt-2">
-          <button type="button" onClick={() => navigate("/")} className="text-xs font-extrabold text-slate-500 hover:underline">
+          <button type="button" onClick={() => navigate("/battle")} className="text-xs font-extrabold text-slate-500 hover:underline">
             ← Back to Battles Lobby
           </button>
         </div>
