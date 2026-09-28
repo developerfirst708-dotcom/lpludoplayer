@@ -59,7 +59,7 @@ export default function Login() {
     <div className="flex min-h-screen flex-col justify-center gap-6 px-6 py-10">
       <div className="flex flex-col items-center gap-3 text-center">
         {/* brand logo (public/logo.png) */}
-        <img src="/logo.png" alt="LP Ludo" className="w-full max-w-[380px] rounded-2xl shadow-card" />
+        <img src="/logo.png" alt="LP Ludo" className="aspect-square w-full max-w-[190px] rounded-full object-cover" />
         <h1 className="text-2xl font-black tracking-tight text-ink">WELCOME</h1>
         <p className="text-sm font-semibold text-slate-500">LP Ludo Player — 1v1 Ludo battles for real money</p>
       </div>
