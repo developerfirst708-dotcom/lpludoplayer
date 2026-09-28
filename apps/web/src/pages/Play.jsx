@@ -31,38 +31,32 @@ const ACTIVE_STATUSES = ["join_requested", "running", "room_submitted", "result_
 const RUNNING_STATUSES = ["join_requested", "running", "room_submitted", "result_submitted", "cancel_requested"];
 
 /**
- * Social-proof "running battles" — the exact list Adda Ludo ships in battle.jsx.
+ * Social-proof "running battles" — Adda Ludo ships this list in battle.jsx.
  * They are display-only (isFake → clicking never navigates) and never touch the
  * API. Delete this block to switch the list to real battles only.
+ *
+ * Real accounts get a random 5-letter handle at login (see
+ * apps/api/src/services/auth.service.js), so the stand-ins are generated with
+ * the same alphabet/length — they read as genuinely assigned players instead
+ * of the old look-alike "Player 145" / "Player 256" counters.
  */
-const FAKE_PLAYER_NAMES = [
-  "rocky", "khatu", "Player 59", "Sohan", "Player 145",
-  "Player 156", "Player 167", "Player 178", "Player 189", "Player 190",
-  "Player 201", "Player 212", "Player 223", "Player 234", "Player 245",
-  "Player 256", "Player 267", "Player 278", "Player 289", "Player 300",
-];
-
-const FAKE_OPPONENT_NAMES = [
-  "Player 311", "Player 322", "aao koi", "Player 344", "Player 355",
-  "Player 366", "Player 377", "Player 388", "Player 399", "Player 410",
-  "Player 421", "Player 432", "Player 443", "Player 454", "Player 465",
-  "Player 476", "Player 487", "Player 498", "Player 509", "Player 520",
-];
+const NAME_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // I and O omitted (look-alikes)
+const makeFakeName = () => {
+  let out = "";
+  for (let i = 0; i < 5; i++) out += NAME_ALPHABET[Math.floor(Math.random() * NAME_ALPHABET.length)];
+  return out;
+};
 
 const FAKE_BATTLE_AMOUNTS = [
   1000, 2050, 500, 350, 3500, 450, 150, 500, 100, 1450, 350, 2050, 1900, 600, 2000, 200, 100, 2250, 150, 3500, 5500, 950, 50, 1050,
 ];
 
-const randomFrom = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const FAKE_RUNNING_AMOUNTS = FAKE_BATTLE_AMOUNTS.slice(0, 15);
 
 const FAKE_RUNNING_BATTLES = FAKE_RUNNING_AMOUNTS.map((amount, index) => {
-  const creatorName = randomFrom(FAKE_PLAYER_NAMES);
-  let opponentName = randomFrom(FAKE_OPPONENT_NAMES);
-
-  if (opponentName === creatorName) {
-    opponentName = `${opponentName} Jr.`;
-  }
+  const creatorName = makeFakeName();
+  let opponentName = makeFakeName();
+  while (opponentName === creatorName) opponentName = makeFakeName();
 
   const stakePaise = rupeesToPaise(amount);
   return {

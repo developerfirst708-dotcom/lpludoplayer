@@ -46,6 +46,11 @@ export default function Refer() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* hero artwork (public/refer-and-earn.jpg) */}
+      <section className="overflow-hidden rounded-2xl shadow-card">
+        <img src="/refer-and-earn.jpg" alt="Refer and earn" className="h-auto w-full" />
+      </section>
+
       <Panel title="Your referral code">
         <div className="space-y-3">
           <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-1.5">
