@@ -355,9 +355,9 @@ export default function Wallet() {
                   label="Amount (₹)"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  placeholder="1000"
+                  placeholder="300"
                   inputMode="decimal"
-                  hint="Minimum withdrawal ₹1,000"
+                  hint="Minimum withdrawal ₹300"
                 />
                 <Input
                   label="Your UPI ID"

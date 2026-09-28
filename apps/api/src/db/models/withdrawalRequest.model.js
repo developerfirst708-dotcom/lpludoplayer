@@ -9,7 +9,7 @@ import mongoose from "mongoose";
 const withdrawalRequestSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    amountPaise: { type: Number, required: true, min: 100000 }, // min ₹1000
+    amountPaise: { type: Number, required: true, min: 30000 }, // min ₹300
 
     upiId: { type: String, required: true, trim: true },
     status: {

@@ -130,7 +130,7 @@ export default function Settings() {
               label="Minimum withdrawal (₹)"
               value={form.withdrawalMin}
               onChange={(e) => set({ withdrawalMin: e.target.value })}
-              placeholder="1000.00"
+              placeholder="300.00"
               inputMode="decimal"
               disabled={!isSuperadmin}
               hint={settings.data?.withdrawalMinPaise ? `currently ${formatPaise(settings.data.withdrawalMinPaise)}` : undefined}

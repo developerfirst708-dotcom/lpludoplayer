@@ -20,7 +20,7 @@ export const withdrawRequestSchema = z.object({
   amountPaise: z
     .number({ invalid_type_error: "Amount is required" })
     .int()
-    .min(100000, "Minimum withdrawal is ₹1,000"),
+    .min(30000, "Minimum withdrawal is ₹300"),
   upiId: z.string().trim().regex(/^[\w.-]{2,64}@[a-zA-Z]{2,32}$/, "Enter a valid UPI ID"),
 });
 
@@ -56,7 +56,7 @@ export const adminSettingsSchema = z.object({
   depositUpiId: z.string().trim().regex(/^[\w.-]{2,64}@[a-zA-Z]{2,32}$/, "Enter a valid UPI ID").optional(),
   depositUpiName: z.string().trim().max(60).optional(),
   depositMinPaise: z.number().int().min(1000).optional(),
-  withdrawalMinPaise: z.number().int().min(100000).optional(),
+  withdrawalMinPaise: z.number().int().min(30000).optional(),
   /** gateway applies below this amount; manual UPI/UTR at or above it */
   depositGatewayMaxPaise: z.number().int().min(1000).optional(),
   maintenanceMode: z.boolean().optional(),

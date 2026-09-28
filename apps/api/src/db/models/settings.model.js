@@ -12,7 +12,7 @@ const settingsSchema = new mongoose.Schema(
     depositUpiName: { type: String, trim: true },
     depositMinPaise: { type: Number, default: 1000 },   // ₹10
     depositMaxPaise: { type: Number, default: 5000000 }, // ₹50,000
-    withdrawalMinPaise: { type: Number, default: 100000 }, // ₹1,000
+    withdrawalMinPaise: { type: Number, default: 30000 }, // ₹300
     /**
      * Hybrid deposits: amounts BELOW this go through the IMB Pay gateway
      * (auto-verified), amounts at/above it use the manual UPI + UTR flow.
@@ -33,8 +33,22 @@ const settingsSchema = new mongoose.Schema(
 
 export const Settings = mongoose.model("Settings", settingsSchema);
 
+/**
+ * The withdrawal minimum default moved from ₹1,000 to ₹300 after launch. The
+ * singleton settings doc on existing installs still carries the old value, so
+ * upgrade it in place — but only while it holds that exact legacy default, so a
+ * deliberately configured admin value is never overwritten.
+ */
+const LEGACY_WITHDRAWAL_MIN_PAISE = 100000; // old ₹1,000 default
+const DEFAULT_WITHDRAWAL_MIN_PAISE = 30000; // new ₹300 default
+
 export async function getSettings() {
   let doc = await Settings.findOne({ key: "global" });
-  if (!doc) doc = await Settings.create({ key: "global" });
+  if (!doc) {
+    doc = await Settings.create({ key: "global" });
+  } else if (doc.withdrawalMinPaise === LEGACY_WITHDRAWAL_MIN_PAISE) {
+    doc.withdrawalMinPaise = DEFAULT_WITHDRAWAL_MIN_PAISE;
+    await doc.save();
+  }
   return doc;
 }

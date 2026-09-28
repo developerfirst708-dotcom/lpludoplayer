@@ -61,7 +61,7 @@ export const updateProfileSchema = z.object({
 });
 
 export const withdrawRequestSchema = z.object({
-  amountPaise: z.number({ invalid_type_error: "Amount is required" }).int().min(100000, "Minimum withdrawal is ₹1,000"),
+  amountPaise: z.number({ invalid_type_error: "Amount is required" }).int().min(30000, "Minimum withdrawal is ₹300"),
   upiId: z.string().trim().regex(/^[\w.-]{2,64}@[a-zA-Z]{2,32}$/, "Enter a valid UPI ID"),
 });
 
