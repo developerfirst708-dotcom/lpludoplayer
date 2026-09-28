@@ -8,7 +8,7 @@ export default function AppDownload() {
     <div className="flex flex-col gap-4">
       <Panel title="Download the LPLUDO app">
         <div className="flex flex-col items-center gap-3 py-4 text-center">
-          <img src="/logo.jpg" alt="LPLUDO" className="h-20 w-auto object-contain" />
+          <img src="/logo.png" alt="LPLUDO" className="h-20 w-auto object-contain" />
           <p className="text-lg font-black tracking-tight text-ink">LPLUDO for Android</p>
           <p className="max-w-xs text-xs font-semibold text-slate-500">
             The app download link will be published here soon. Until then, keep playing right here in your browser —

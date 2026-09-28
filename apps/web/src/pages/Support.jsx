@@ -22,22 +22,10 @@ export default function Support() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* header notice */}
-      <section className="rounded-2xl border border-[#FAD655] bg-gradient-to-r from-[#FEF4BA] via-[#FDE88C] to-[#FCD95B] p-4 shadow-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">📢</span>
-          <h2 className="text-base font-black uppercase tracking-wide text-amber-950">24/7 Support</h2>
-        </div>
-        <p className="mt-1 text-xs font-bold leading-relaxed text-amber-900/90">
-          Having trouble with deposit, withdrawal, or a game result? Contact our official support team for a fast
-          resolution.
-        </p>
-      </section>
-
       <Panel title="Chat with us">
         <div className="space-y-3">
-          <div className="relative h-40 w-full overflow-hidden rounded-2xl border border-gray-100 bg-gray-50">
-            <img src="/wpsupport.jpeg" alt="WhatsApp support" className="h-full w-full object-cover" />
+          <div className="relative w-full overflow-hidden rounded-2xl border border-gray-100 bg-gray-50">
+            <img src="/wpsupport.jpeg" alt="WhatsApp support" className="h-auto w-full object-contain" />
             <span className="absolute bottom-2 left-3 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-white">
               Instant chat response
             </span>

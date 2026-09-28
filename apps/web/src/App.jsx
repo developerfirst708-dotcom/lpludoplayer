@@ -9,6 +9,7 @@ import Play from "./pages/Play.jsx";
 import Battle from "./pages/Battle.jsx";
 import Wallet from "./pages/Wallet.jsx";
 import Profile from "./pages/Profile.jsx";
+import Kyc from "./pages/Kyc.jsx";
 import Login from "./pages/Login.jsx";
 import Support from "./pages/Support.jsx";
 import Refer from "./pages/Refer.jsx";
@@ -68,7 +69,7 @@ function AppHeader({ onOpenMenu }) {
       </button>
 
       <Link to="/" aria-label="LPLUDO home" className="flex items-center transition-transform active:scale-95">
-        <img src="/logo.jpg" alt="LPLUDO" className="h-9 w-auto max-w-[130px] object-contain" />
+        <img src="/logo.png" alt="LPLUDO" className="h-9 w-auto max-w-[130px] object-contain" />
       </Link>
 
       <div className="ml-auto flex items-center gap-1.5">
@@ -119,7 +120,7 @@ function Drawer({ open, onClose }) {
       >
         <div className="flex items-center justify-between border-b border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2">
-            <img src="/logo.jpg" alt="LPLUDO" className="h-7 w-auto object-contain" />
+            <img src="/logo.png" alt="LPLUDO" className="h-7 w-auto object-contain" />
             <h2 className="text-base font-black tracking-tight text-slate-800">Menu</h2>
           </div>
           <button
@@ -231,6 +232,7 @@ export default function App() {
           <Route path="/battle/:id" element={<Battle />} />
           <Route path="/wallet" element={<Wallet />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/kyc" element={<Kyc />} />
           <Route path="/support" element={<Support />} />
           <Route path="/refer" element={<Refer />} />
           <Route path="/refer-history" element={<ReferHistory />} />

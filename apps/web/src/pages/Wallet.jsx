@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api.js";
 import { socket } from "../lib/socket.js";
 import { rupeesToPaise, formatPaise } from "@lpludo/shared";
 import { useToast } from "../components/Toast.jsx";
 import { Badge, Button, Empty, Input, Panel, Skeleton, Spinner, Tabs, TabsButton, TabsList, TabsPanel } from "../components/ui.jsx";
-import { CoinIcon } from "../components/art.jsx";
 import GatewayDepositCard from "../components/GatewayDepositCard.jsx";
 
 /**
@@ -43,7 +42,7 @@ function safePaise(input) {
 export default function Wallet() {
   const toast = useToast();
   const qc = useQueryClient();
-  const [tab, setTab] = useState("balance");
+  const [tab, setTab] = useState("deposit");
   const [amount, setAmount] = useState("");
   const [utr, setUtr] = useState("");
   const [upiId, setUpiId] = useState("");
@@ -102,7 +101,6 @@ export default function Wallet() {
     };
   }, [qc]);
 
-  const w = wallet.data;
   const kycVerified = profile.data?.user?.kycStatus === "verified";
 
   /** rupees (string) -> integer paise, with the shared exact-math guard */
@@ -207,8 +205,6 @@ export default function Wallet() {
     return <Empty title="Wallet unavailable" hint={wallet.error?.message} />;
   }
 
-  const totals = w?.totals || {};
-
   // hybrid rail selection: instant gateway under the threshold, manual UPI + UTR at/above it
   const g = details.data;
   const gatewayPaise = safePaise(amount);
@@ -217,86 +213,12 @@ export default function Wallet() {
 
   return (
     <div className="space-y-4">
-      {/* headline balance */}
-      <section className="rounded-2xl border border-gray-100 bg-gradient-to-b from-[#FFFDF5] to-white p-4 shadow-card">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Available balance</p>
-        <div className="mt-1 flex items-end gap-2">
-          <CoinIcon className="h-7 w-7 text-sm" />
-          <span className="text-3xl font-black tracking-tight text-ink">{formatPaise(w?.availablePaise ?? 0)}</span>
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-xl bg-gray-50 px-3 py-2">
-            <p className="font-bold text-slate-400">Total</p>
-            <p className="font-black text-slate-700">{formatPaise(w?.totalPaise ?? 0)}</p>
-          </div>
-          <div className="rounded-xl bg-gray-50 px-3 py-2">
-            <p className="font-bold text-slate-400">On hold</p>
-            <p className="font-black text-slate-700">{formatPaise(w?.heldPaise ?? 0)}</p>
-          </div>
-        </div>
-      </section>
-
       <Tabs value={tab} onChange={setTab}>
         <TabsList>
-          <TabsButton value="balance" activeValue={tab} onChange={setTab}>Balance</TabsButton>
           <TabsButton value="deposit" activeValue={tab} onChange={setTab}>Add funds</TabsButton>
           <TabsButton value="withdraw" activeValue={tab} onChange={setTab}>Withdraw</TabsButton>
           <TabsButton value="history" activeValue={tab} onChange={setTab}>History</TabsButton>
         </TabsList>
-
-        <TabsPanel match={tab} value="balance">
-          <div className="space-y-3">
-            <Panel title="Stats">
-              <div className="grid grid-cols-3 gap-2 text-center">
-                {[
-                  ["Deposited", totals.depositedPaise],
-                  ["Won", totals.wonPaise],
-                  ["Withdrawn", totals.withdrawnPaise],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-xl bg-gray-50 px-2 py-3">
-                    <p className="text-[11px] font-bold text-slate-400">{label}</p>
-                    <p className="mt-0.5 text-sm font-black text-slate-700">{formatPaise(value ?? 0)}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2.5 text-sm">
-                <span className="font-bold text-slate-500">Battles played</span>
-                <span className="font-black text-slate-700">
-                  {totals.battlesPlayed ?? 0}
-                  <span className="ml-1 text-xs font-bold text-slate-400">({totals.battlesWon ?? 0} won)</span>
-                </span>
-              </div>
-            </Panel>
-
-            <Panel title="Account">
-              <div className="space-y-2.5 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-500">KYC status</span>
-                  <Badge status={profile.data?.user?.kycStatus || "not_submitted"} />
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-bold text-slate-500">Referral code</span>
-                  <span className="font-mono text-xs font-bold text-slate-700">{profile.data?.referralCode || "—"}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-bold text-slate-500">Referral balance</span>
-                  <span className="flex items-center gap-2">
-                    <span className="font-black text-slate-700">{formatPaise(w?.referralPaise ?? 0)}</span>
-                    <Link to="/redeem" className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-[11px] font-extrabold text-brand-600">
-                      Redeem
-                    </Link>
-                  </span>
-                </div>
-                {!kycVerified && (
-                  <Link to="/profile" className="block rounded-xl bg-brand-500/10 px-3 py-2 text-xs font-bold text-brand-600">
-                    Complete KYC to unlock withdrawals →
-                  </Link>
-                )}
-              </div>
-            </Panel>
-          </div>
-        </TabsPanel>
-
 
         <TabsPanel match={tab} value="deposit">
           <Panel title="Add funds">
@@ -449,7 +371,7 @@ export default function Wallet() {
                 <p className="text-[11px] text-slate-500">The amount is put on hold immediately and paid out by an admin.</p>
               </div>
             ) : (
-              <Empty title="KYC required" hint="Verify your identity from the Profile tab before withdrawing." />
+              <Empty title="KYC required" hint="Open KYC Verification from your Profile to unlock withdrawals." />
             )}
           </Panel>
         </TabsPanel>

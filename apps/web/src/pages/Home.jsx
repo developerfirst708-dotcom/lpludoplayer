@@ -70,11 +70,6 @@ export default function Home() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Brand banner (public/logo.jpg) */}
-      <section className="overflow-hidden rounded-2xl shadow-card" data-purpose="welcome-banner">
-        <img src="/logo.jpg" alt="LPLUDO" className="h-auto w-full" />
-      </section>
-
       {/* Referral banner (verbatim from the sample) */}
       <section
         className="flex items-center gap-3 rounded-xl border border-[#FAD655] bg-gradient-to-b from-[#FEF4BA] via-[#FDE88C] to-[#FCD95B] p-3.5 shadow-sm"
@@ -90,7 +85,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Games header + cards (posters: public/game1.jpg + public/game2.jpeg) */}
+      {/* Games header + cards (posters: public/ludo-classic-manual.jpg + public/lp-ludo-player.jpg) */}
       <SectionTitle title="Games" hint="Classic Web Ludo is live. More formats are on the way." />
 
       <div className="flex flex-col gap-4">
@@ -98,15 +93,15 @@ export default function Home() {
           title="Classic Web Ludo"
           subtitle="Play the Most Popular Ludo Game Format"
           cta="Play Now"
-          image="/game1.jpg"
-          imageAlt="Classic Ludo poster"
+          image="/ludo-classic-manual.jpg"
+          imageAlt="Classic Web Ludo poster"
           onPlay={() => navigate("/play")}
         />
         <GameCard
           title="Classic App Ludo"
           subtitle="Ludo King Mode is now available!"
           cta="Coming Soon"
-          image="/game2.jpeg"
+          image="/lp-ludo-player.jpg"
           imageAlt="Classic App Ludo poster"
           disabled
         />

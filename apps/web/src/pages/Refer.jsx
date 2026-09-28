@@ -46,23 +46,6 @@ export default function Refer() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* hero artwork (public/refer-and-earn.jpg) */}
-      <section className="overflow-hidden rounded-2xl shadow-card">
-        <img src="/refer-and-earn.jpg" alt="Refer and earn" className="h-auto w-full" />
-      </section>
-
-      {/* banner */}
-      <section className="rounded-2xl border border-[#FAD655] bg-gradient-to-r from-[#FEF4BA] via-[#FDE88C] to-[#FCD95B] p-4 text-center shadow-sm">
-        <span className="inline-block rounded-full bg-amber-950 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-200">
-          Refer &amp; Earn
-        </span>
-        <h1 className="mt-1.5 text-xl font-black uppercase tracking-tight text-amber-950">2% Lifetime Commission</h1>
-        <p className="mx-auto mt-1 max-w-xs text-[11px] font-semibold leading-snug text-amber-900/90">
-          Invite friends and earn <span className="font-extrabold">2% of every battle</span> they win — credited to
-          your referral balance for life.
-        </p>
-      </section>
-
       <Panel title="Your referral code">
         <div className="space-y-3">
           <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-1.5">

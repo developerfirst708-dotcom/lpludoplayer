@@ -1,40 +1,28 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, apiUpload } from "../lib/api.js";
+import { api } from "../lib/api.js";
 import { socket } from "../lib/socket.js";
 import { formatPaise } from "@lpludo/shared";
 import { useToast } from "../components/Toast.jsx";
-import { Badge, Button, Empty, Input, Panel, Skeleton } from "../components/ui.jsx";
+import { Badge, Button, Empty, Panel, Skeleton } from "../components/ui.jsx";
 import { NavIcon } from "../components/art.jsx";
 import { logout } from "../lib/auth.js";
 
 /**
- * Profile — the player's handle, the battleludo option boxes (KYC shortcut,
- * "have a referral code?", lifetime stats), KYC submission and logout.
- * KYC documents are uploaded first (POST /uploads?kind=kyc) and then
- * referenced by key in POST /user/kyc, which is how the API expects them.
+ * Profile — the player's handle (edited inline on the name itself), the
+ * battleludo option boxes (KYC shortcut, "have a referral code?", lifetime
+ * stats) and logout. The KYC flow itself lives on its own /kyc page, reached
+ * from the KYC shortcut box here.
  */
 export default function Profile() {
   const toast = useToast();
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [savingName, setSavingName] = useState(false);
+  const [editingName, setEditingName] = useState(false);
   const [refCode, setRefCode] = useState("");
   const [applying, setApplying] = useState(false);
-
-  const [holderName, setHolderName] = useState("");
-  const [upiId, setUpiId] = useState("");
-  const [frontKey, setFrontKey] = useState("");
-  const [backKey, setBackKey] = useState("");
-  const [frontName, setFrontName] = useState("");
-  const [backName, setBackName] = useState("");
-  const [uploading, setUploading] = useState(null);
-  const [submittingKyc, setSubmittingKyc] = useState(false);
-
-  const frontRef = useRef(null);
-  const backRef = useRef(null);
-  const kycSectionRef = useRef(null);
 
   const profile = useQuery({ queryKey: ["profile"], queryFn: () => api("/user/profile") });
 
@@ -59,7 +47,6 @@ export default function Profile() {
 
   const u = profile.data?.user || {};
   const kycStatus = u.kycStatus || "not_submitted";
-  const kycLocked = kycStatus === "pending" || kycStatus === "verified";
   const kycVerified = kycStatus === "verified";
 
   async function saveName() {
@@ -67,6 +54,7 @@ export default function Profile() {
     try {
       await api("/user/profile", { method: "PATCH", body: { name } });
       toast.success("Display name updated");
+      setEditingName(false);
       qc.invalidateQueries({ queryKey: ["profile"] });
     } catch (err) {
       toast.error(err.message);
@@ -87,46 +75,6 @@ export default function Profile() {
     } finally {
       setApplying(false);
     }
-  }
-
-  async function upload(kind, file) {
-    if (!file) return;
-    setUploading(kind);
-    try {
-      const { key } = await apiUpload("/uploads", file, "kyc");
-      if (kind === "front") {
-        setFrontKey(key);
-        setFrontName(file.name);
-      } else {
-        setBackKey(key);
-        setBackName(file.name);
-      }
-      toast.success("Document uploaded");
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setUploading(null);
-    }
-  }
-
-  async function submitKyc() {
-    setSubmittingKyc(true);
-    try {
-      await api("/user/kyc", {
-        method: "POST",
-        body: { holderName, upiId, frontImageKey: frontKey, backImageKey: backKey },
-      });
-      toast.success("KYC submitted for review");
-      qc.invalidateQueries({ queryKey: ["profile"] });
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setSubmittingKyc(false);
-    }
-  }
-
-  function scrollToKyc() {
-    kycSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   if (profile.isLoading) {
@@ -152,7 +100,51 @@ export default function Profile() {
             {u.name?.[0]?.toUpperCase() || "L"}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-lg font-black tracking-tight text-ink">{u.name || "—"}</p>
+            {editingName ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  autoFocus
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={40}
+                  placeholder="Your player name"
+                  className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm font-bold text-slate-900 outline-none focus:border-brand-500 focus:bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={saveName}
+                  disabled={savingName || !name.trim() || name === u.name}
+                  className="shrink-0 rounded-lg bg-brand-500 px-2.5 py-1.5 text-[11px] font-black uppercase text-neutral-900 shadow-btn-gold transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {savingName ? "Saving…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setName(u.name || "");
+                    setEditingName(false);
+                  }}
+                  aria-label="Cancel rename"
+                  className="shrink-0 rounded-lg bg-gray-100 px-2 py-1.5 text-[11px] font-black text-slate-500 transition-all active:scale-95"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-lg font-black tracking-tight text-ink">{u.name || "—"}</p>
+                <button
+                  type="button"
+                  onClick={() => setEditingName(true)}
+                  aria-label="Edit display name"
+                  className="shrink-0 rounded-lg p-1 text-slate-400 transition-colors hover:bg-gray-100 hover:text-brand-600 active:scale-95"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                  </svg>
+                </button>
+              </div>
+            )}
             <p className="text-xs font-semibold text-slate-400">+91 {profile.data?.phone || "—"}</p>
           </div>
           <div className="ml-auto">
@@ -177,8 +169,11 @@ export default function Profile() {
         </div>
       </section>
 
-      {/* KYC shortcut box */}
-      <div className="flex items-center justify-between rounded-2xl border border-[#FAD655]/70 bg-white p-3.5 shadow-card">
+      {/* KYC shortcut box — the verification flow itself lives on /kyc */}
+      <Link
+        to="/kyc"
+        className="flex items-center justify-between rounded-2xl border border-[#FAD655]/70 bg-white p-3.5 shadow-card transition-all active:scale-[0.99]"
+      >
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500/15 text-base">🆔</div>
           <div>
@@ -194,15 +189,11 @@ export default function Profile() {
             ✓ Verified
           </span>
         ) : (
-          <button
-            type="button"
-            onClick={scrollToKyc}
-            className="rounded-xl bg-brand-500 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-neutral-900 shadow-btn-gold transition-all active:scale-95"
-          >
+          <span className="rounded-xl bg-brand-500 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-neutral-900 shadow-btn-gold">
             {kycStatus === "pending" ? "Under review" : "Complete KYC"}
-          </button>
+          </span>
         )}
-      </div>
+      </Link>
 
       {/* referral box */}
       <div className="rounded-2xl border border-[#FAD655]/70 bg-white p-3.5 shadow-card">
@@ -236,107 +227,6 @@ export default function Profile() {
         <Link to="/refer" className="mt-2 block text-[11px] font-extrabold text-brand-600 hover:text-brand-500">
           Share your code — earn 2% of every battle your friends win →
         </Link>
-      </div>
-
-      {/* display name */}
-      <Panel title="Player details">
-        <div className="space-y-3">
-          <Input
-            label="Display name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Your player code"
-            hint="Auto-generated for you — rename it if you prefer."
-            maxLength={40}
-          />
-          <Input label="Phone number" value={profile.data?.phone || ""} disabled hint="Phone numbers cannot be changed." />
-          <Button className="w-full" onClick={saveName} loading={savingName} disabled={!name || name === u.name}>
-            Save changes
-          </Button>
-        </div>
-      </Panel>
-
-      {/* KYC */}
-      <div ref={kycSectionRef}>
-        <Panel title="KYC verification">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2.5">
-              <span className="text-sm font-bold text-slate-500">Status</span>
-              <Badge status={kycStatus} />
-            </div>
-
-            {kycStatus === "verified" && (
-              <p className="rounded-xl bg-emerald-50 px-3 py-2.5 text-xs font-bold text-emerald-700">
-                Your KYC is verified — withdrawals are unlocked.
-              </p>
-            )}
-
-            {kycStatus === "pending" && (
-              <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-xs font-bold text-amber-700">
-                Documents submitted. An admin will review them shortly.
-              </p>
-            )}
-
-            {!kycLocked && (
-              <>
-                {kycStatus === "rejected" && (
-                  <p className="rounded-xl bg-rose-50 px-3 py-2.5 text-xs font-bold text-rose-700">
-                    Your previous submission was rejected. Please upload again.
-                  </p>
-                )}
-                <Input
-                  label="Name on document"
-                  value={holderName}
-                  onChange={(e) => setHolderName(e.target.value)}
-                  placeholder="As printed on your ID"
-                />
-                <Input
-                  label="UPI ID for payouts"
-                  value={upiId}
-                  onChange={(e) => setUpiId(e.target.value)}
-                  placeholder="yourname@bank"
-                />
-
-                <input ref={frontRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => upload("front", e.target.files?.[0])} />
-                <input ref={backRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => upload("back", e.target.files?.[0])} />
-
-                {[
-                  ["front", "ID front", frontName, frontRef, frontKey, uploading === "front"],
-                  ["back", "ID back", backName, backRef, backKey, uploading === "back"],
-                ].map(([kind, label, fileLabel, ref, key, isBusy]) => (
-                  <div key={kind} className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
-                      <p className={`truncate text-xs font-bold ${key ? "text-emerald-600" : "text-slate-500"}`}>
-                        {isBusy ? "Uploading…" : fileLabel || "No file chosen"}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      className="shrink-0 px-4 py-2 text-xs"
-                      loading={isBusy}
-                      onClick={() => ref.current?.click()}
-                    >
-                      {key ? "Replace" : "Upload"}
-                    </Button>
-                  </div>
-                ))}
-
-                <Button
-                  className="w-full"
-                  onClick={submitKyc}
-                  loading={submittingKyc}
-                  disabled={!holderName.trim() || !upiId.trim() || !frontKey || !backKey}
-                >
-                  Submit KYC
-                </Button>
-                <p className="text-[11px] text-slate-500">
-                  JPEG, PNG or WebP. Documents are stored privately and only visible to you and the review team.
-                </p>
-              </>
-            )}
-          </div>
-        </Panel>
       </div>
 
       {/* account + logout */}
