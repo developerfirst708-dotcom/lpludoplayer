@@ -25,6 +25,7 @@ export async function applyLedger({
   userId,
   amount,
   heldDelta = 0,
+  referralDelta = 0,
   type,
   refType,
   refId,
@@ -34,8 +35,10 @@ export async function applyLedger({
   actorId = null,
 }) {
   if (!session) throw new WalletError("applyLedger requires a transaction session");
-  if (!Number.isInteger(amount) || !Number.isInteger(heldDelta)) {
-    throw new WalletError(`ledger deltas must be integers (amount=${amount}, heldDelta=${heldDelta})`);
+  if (!Number.isInteger(amount) || !Number.isInteger(heldDelta) || !Number.isInteger(referralDelta)) {
+    throw new WalletError(
+      `ledger deltas must be integers (amount=${amount}, heldDelta=${heldDelta}, referralDelta=${referralDelta})`
+    );
   }
 
   // 1) idempotency: if this exact operation already ran, return its row untouched
@@ -53,12 +56,15 @@ export async function applyLedger({
 
   const newTotal = wallet.totalPaise + amount;
   const newHeld = wallet.heldPaise + heldDelta;
+  const newReferral = wallet.referralPaise + referralDelta;
   if (newTotal < 0) throw new WalletError("insufficient balance", { need: -amount, have: wallet.totalPaise });
   if (newHeld < 0) throw new WalletError("cannot release more than is held", { heldDelta });
   if (newTotal - newHeld < 0) throw new WalletError("operation would overdraw available balance");
+  if (newReferral < 0) throw new WalletError("insufficient referral balance", { need: -referralDelta, have: wallet.referralPaise });
 
   wallet.totalPaise = newTotal;
   wallet.heldPaise = newHeld;
+  wallet.referralPaise = newReferral;
   wallet.version += 1;
 
   // running counters so dashboards never re-aggregate the ledger (fixes P5)
@@ -66,6 +72,7 @@ export async function applyLedger({
     case "deposit": wallet.totals.depositedPaise += amount; break;
     case "withdrawal_paid": wallet.totals.withdrawnPaise += -amount; break;
     case "prize_win": wallet.totals.wonPaise += amount; break;
+    case "referral_commission": wallet.totals.referralEarnedPaise = (wallet.totals.referralEarnedPaise || 0) + referralDelta; break;
     case "entry_fee_paid":
       wallet.totals.lostPaise += -amount; // stake consumed by this battle
       wallet.totals.battlesPlayed += 1;
@@ -88,6 +95,7 @@ export async function applyLedger({
         userId,
         amount,
         heldDelta,
+        referralDelta,
         balanceAfter: newTotal,
         availableAfter: newTotal - newHeld,
         type,
@@ -117,7 +125,7 @@ export async function applyLedger({
  */
 export async function reconcileWallet(userId, { session } = {}) {
   const wallet = await Wallet.findOne({ userId }).session(session);
-  if (!wallet) return { wallet: null, ledgerSum: 0, ledgerHeld: 0, rows: 0, drift: 0, heldDrift: 0 };
+  if (!wallet) return { wallet: null, ledgerSum: 0, ledgerHeld: 0, ledgerReferral: 0, rows: 0, drift: 0, heldDrift: 0, referralDrift: 0 };
 
   const [agg] = await LedgerEntry.aggregate([
     { $match: { walletId: wallet._id } },
@@ -126,6 +134,7 @@ export async function reconcileWallet(userId, { session } = {}) {
         _id: null,
         total: { $sum: "$amount" },
         held: { $sum: "$heldDelta" },
+        referral: { $sum: "$referralDelta" },
         rows: { $sum: 1 },
       },
     },
@@ -133,13 +142,16 @@ export async function reconcileWallet(userId, { session } = {}) {
 
   const ledgerSum = agg?.total ?? 0;
   const ledgerHeld = agg?.held ?? 0;
+  const ledgerReferral = agg?.referral ?? 0;
   return {
     wallet,
     ledgerSum,
     ledgerHeld,
+    ledgerReferral,
     rows: agg?.rows ?? 0,
     drift: ledgerSum - wallet.totalPaise,
     heldDrift: ledgerHeld - wallet.heldPaise,
+    referralDrift: ledgerReferral - (wallet.referralPaise || 0),
   };
 }
 

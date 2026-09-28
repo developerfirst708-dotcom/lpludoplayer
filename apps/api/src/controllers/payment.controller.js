@@ -8,7 +8,7 @@ import {
   BadRequestError, ForbiddenError, ConflictError, NotFoundError,
 } from "@lpludo/shared";
 import { validate } from "@lpludo/shared/schemas";
-import { depositClaimSchema, gatewayDepositSchema, withdrawRequestSchema } from "../validation/extraSchemas.js";
+import { depositClaimSchema, gatewayDepositSchema, withdrawRequestSchema, referralRedeemSchema } from "../validation/extraSchemas.js";
 import { paginationSchema } from "@lpludo/shared/schemas";
 import { normalizeUtr } from "../utils/utr.js";
 import { emitAdminRefresh, emitWalletUpdate } from "../realtime/io.js";
@@ -202,4 +202,18 @@ export async function myWithdrawals(req, res) {
       createdAt: w.createdAt, paidAt: w.paidAt || null,
     })),
   });
+}
+
+/* ------------------------------ referral ------------------------------ */
+
+/**
+ * POST /payments/referral/redeem — move referral earnings into the playable
+ * balance. Adda Ludo limits: ₹200 minimum, ₹10,000 maximum, never more than
+ * the referral balance itself (the ledger guard enforces that inside the tx).
+ */
+export async function redeemReferral(req, res) {
+  const { amountPaise } = validate(referralRedeemSchema, req.body);
+  const view = await walletService.redeemReferral({ userId: req.user.id, amountPaise });
+  emitWalletUpdate(req.user.id, view);
+  res.json({ wallet: view });
 }

@@ -8,6 +8,7 @@ import paymentRoutes from "./payment.routes.js";
 import webhookRoutes from "./webhook.routes.js";
 import uploadRoutes from "./upload.routes.js";
 import adminRoutes from "./admin.routes.js";
+import settingsRoutes from "./settings.routes.js";
 
 const api = Router();
 
@@ -19,6 +20,7 @@ api.use("/payments", paymentRoutes);
 api.use("/webhooks", webhookRoutes); // public payment-gateway callbacks
 api.use("/uploads", uploadRoutes);
 api.use("/files", uploadRoutes); // authenticated read of stored objects
+api.use("/settings", settingsRoutes); // public player-facing settings
 api.use("/admin", adminRoutes);
 
 export default api;

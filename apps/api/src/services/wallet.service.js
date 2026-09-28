@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { withTransaction } from "../db/connect.js";
 import { applyLedger } from "./ledger.service.js";
 import { withLock } from "../db/redis.js";
@@ -23,6 +24,7 @@ function viewOf(wallet) {
     totalPaise: wallet.totalPaise,
     heldPaise: wallet.heldPaise,
     availablePaise: wallet.totalPaise - wallet.heldPaise,
+    referralPaise: wallet.referralPaise || 0,
     totals: wallet.totals,
     currency: wallet.currency,
   };
@@ -171,4 +173,41 @@ export async function assertAvailable(userId, amountPaise) {
     throw new ForbiddenError("Insufficient balance for this stake");
   }
   return true;
+}
+
+/**
+ * Lifetime referral commission (2% of the winner's stake) credited to the
+ * referrer's referral balance when a battle settles. One row per contest
+ * (idempotency key) so a retried settlement can never pay it twice.
+ */
+export async function creditReferralCommission({ referrerId, referredUserId, contestId, amountPaise, session }) {
+  const run = async (s) => {
+    const { wallet } = await applyLedger({
+      session: s, userId: referrerId, amount: 0, referralDelta: amountPaise,
+      type: "referral_commission", refType: "contest", refId: contestId,
+      note: "Referral commission 2% from referred player's winning battle",
+      metadata: { referredUserId },
+      idempotencyKey: `referral:${contestId}`,
+    });
+    return viewOf(wallet);
+  };
+  return session ? run(session) : lockedFor(referrerId, run);
+}
+
+/**
+ * Redeem referral balance into the playable/withdrawable balance.
+ * One ledger row carries both deltas so the two buckets can never drift apart.
+ */
+export async function redeemReferral({ userId, amountPaise, session }) {
+  const run = async (s) => {
+    await getOrCreateWallet(userId, { session: s });
+    const { wallet } = await applyLedger({
+      session: s, userId, amount: amountPaise, referralDelta: -amountPaise,
+      type: "referral_redeem", refType: "system", refId: userId,
+      note: "Referral balance redeemed to wallet",
+      idempotencyKey: `referral_redeem:${userId}:${randomUUID()}`,
+    });
+    return viewOf(wallet);
+  };
+  return session ? run(session) : lockedFor(userId, run);
 }

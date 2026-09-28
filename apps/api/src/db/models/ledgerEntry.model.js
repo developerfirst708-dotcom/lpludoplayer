@@ -20,11 +20,13 @@ const ledgerEntrySchema = new mongoose.Schema(
     amount: { type: Number, required: true },
     /** signed integer paise — delta applied to wallet.heldPaise (holds/refunds) */
     heldDelta: { type: Number, required: true, default: 0 },
+    /** signed integer paise — delta applied to wallet.referralPaise (referral commission / redeem) */
+    referralDelta: { type: Number, default: 0 },
     /** running balances AFTER this row (written in the same transaction) */
     balanceAfter: { type: Number, required: true, min: 0 },
     availableAfter: { type: Number, required: true, min: 0 },
 
-    /** deposit | entry_fee_hold | entry_fee_release | entry_fee_refund | prize_win | withdrawal_hold | withdrawal_paid | withdrawal_refund | adjustment */
+    /** deposit | entry_fee_hold | entry_fee_release | entry_fee_refund | prize_win | withdrawal_hold | withdrawal_paid | withdrawal_refund | referral_commission | referral_redeem | adjustment */
     type: { type: String, required: true, index: true },
 
     refType: { type: String, enum: ["contest", "deposit", "withdrawal", "admin", "system"], required: true, index: true },

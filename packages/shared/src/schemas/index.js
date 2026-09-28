@@ -3,7 +3,7 @@
  * One definition = no drift between what the UI checks and what the API trusts.
  */
 import { z } from "zod";
-import { BATTLE_STAKES_Paise } from "../prize.js";
+import { isValidStake } from "../prize.js";
 
 /** 10-digit Indian mobile, stored without +91. */
 export const phoneSchema = z
@@ -33,10 +33,11 @@ export const playerNameSchema = z
   .length(PLAYER_NAME_LENGTH, `Name must be exactly ${PLAYER_NAME_LENGTH} letters`)
   .regex(new RegExp(`^[${PLAYER_NAME_ALPHABET}]+$`, "i"), "Name must contain only letters");
 
+/** Adda Ludo rules: ₹50 – ₹1,00,000, multiples of ₹50 (see prize.js). */
 export const stakeSchema = z
   .number({ invalid_type_error: "Stake is required" })
   .int()
-  .refine((v) => BATTLE_STAKES_Paise.includes(v), "Unknown stake amount");
+  .refine((v) => isValidStake(v), "Stake must be ₹50–₹1,00,000 in multiples of ₹50");
 
 export const createContestSchema = z.object({ stake: stakeSchema });
 

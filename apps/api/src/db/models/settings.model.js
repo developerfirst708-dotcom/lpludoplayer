@@ -20,6 +20,12 @@ const settingsSchema = new mongoose.Schema(
      */
     depositGatewayMaxPaise: { type: Number, default: 500000 },
     maintenanceMode: { type: Boolean, default: false },
+    /**
+     * Support WhatsApp number shown on the Support screen (digits with country
+     * code, e.g. 919876543210). Empty = the screen tells players support is
+     * not configured yet instead of opening a dead chat.
+     */
+    supportWhatsapp: { type: String, trim: true, default: "" },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

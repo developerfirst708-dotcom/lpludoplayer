@@ -25,6 +25,8 @@ const LEDGER_LABELS = {
   entry_fee_paid: "Stake played",
   entry_fee_refund: "Stake refunded",
   prize_win: "Prize won",
+  referral_commission: "Referral commission",
+  referral_redeem: "Referral redeemed",
   referral_bonus: "Referral bonus",
   admin_adjustment: "Admin adjustment",
 };
@@ -276,6 +278,15 @@ export default function Wallet() {
                   <span className="font-bold text-slate-500">Referral code</span>
                   <span className="font-mono text-xs font-bold text-slate-700">{profile.data?.referralCode || "—"}</span>
                 </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-bold text-slate-500">Referral balance</span>
+                  <span className="flex items-center gap-2">
+                    <span className="font-black text-slate-700">{formatPaise(w?.referralPaise ?? 0)}</span>
+                    <Link to="/redeem" className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-[11px] font-extrabold text-brand-600">
+                      Redeem
+                    </Link>
+                  </span>
+                </div>
                 {!kycVerified && (
                   <Link to="/profile" className="block rounded-xl bg-brand-500/10 px-3 py-2 text-xs font-bold text-brand-600">
                     Complete KYC to unlock withdrawals →
@@ -306,6 +317,20 @@ export default function Wallet() {
                 inputMode="decimal"
                 hint={g ? `Min ${formatPaise(g.minPaise)} · Max ${formatPaise(g.maxPaise)}${g.gatewayEnabled ? ` · instant under ${formatPaise(g.gatewayThresholdPaise)}` : ""}` : undefined}
               />
+
+              {/* quick amounts (reference deposit screen) */}
+              <div className="flex gap-2">
+                {[100, 200, 500, 1000].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setAmount(String(preset))}
+                    className="flex-1 rounded-xl border border-gray-200 bg-gray-50 py-1.5 text-xs font-bold text-slate-700 transition-all hover:border-brand-500/50 active:scale-95"
+                  >
+                    +₹{preset}
+                  </button>
+                ))}
+              </div>
 
               {g?.gatewayEnabled && gatewayPaise === null && (
                 <p className="rounded-xl bg-gray-50 px-3 py-2 text-[11px] text-slate-500">

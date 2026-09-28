@@ -34,6 +34,7 @@ export default function Settings() {
         withdrawalMin: toRupees(settings.data.withdrawalMinPaise),
         gatewayMax: toRupees(settings.data.depositGatewayMaxPaise),
         maintenanceMode: Boolean(settings.data.maintenanceMode),
+        supportWhatsapp: settings.data.supportWhatsapp || "",
       });
     }
   }, [settings.data]);
@@ -46,6 +47,7 @@ export default function Settings() {
         withdrawalMinPaise: form.withdrawalMin ? rupeesToPaise(form.withdrawalMin) : undefined,
         depositGatewayMaxPaise: form.gatewayMax ? rupeesToPaise(form.gatewayMax) : undefined,
         maintenanceMode: form.maintenanceMode,
+        supportWhatsapp: form.supportWhatsapp.trim(),
       };
       if (form.depositUpiId.trim()) body.depositUpiId = form.depositUpiId.trim();
       return api("/admin/settings", { method: "POST", body });
@@ -147,6 +149,29 @@ export default function Settings() {
               Max deposit is currently {formatPaise(settings.data?.depositMaxPaise ?? 0)}.
               {settings.data?.updatedAt ? ` Last updated ${new Date(settings.data.updatedAt).toLocaleString("en-IN")}.` : ""}
             </p>
+          </div>
+        </Panel>
+
+        <Panel title="Player support">
+          <div className="space-y-3">
+            <Input
+              label="Support WhatsApp number"
+              value={form.supportWhatsapp}
+              onChange={(e) => set({ supportWhatsapp: e.target.value.replace(/[^\d+]/g, "") })}
+              placeholder="919876543210"
+              inputMode="tel"
+              disabled={!isSuperadmin}
+              hint="Players tap this number on the Support screen. Include the country code (91…), digits only. Leave empty to hide the chat button."
+            />
+            {form.supportWhatsapp.trim() ? (
+              <p className="rounded-xl bg-[#fdf1f7] px-3 py-2 text-[11px] font-semibold text-[#7a3d58]">
+                Players will open a WhatsApp chat with +{form.supportWhatsapp.replace(/^\+/, "")}.
+              </p>
+            ) : (
+              <p className="rounded-xl bg-[#fdf1f7] px-3 py-2 text-[11px] font-semibold text-[#7a3d58]">
+                No number set — the Support screen tells players support is not configured yet.
+              </p>
+            )}
           </div>
         </Panel>
       </div>

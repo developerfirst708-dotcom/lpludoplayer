@@ -21,4 +21,7 @@ router.get("/deposits", requireAuth, asyncH(paymentController.myDeposits));
 router.post("/withdraw", requireAuth, asyncH(paymentController.requestWithdraw));
 router.get("/withdrawals", requireAuth, asyncH(paymentController.myWithdrawals));
 
+// referral earnings -> playable balance
+router.post("/referral/redeem", requireAuth, asyncH(paymentController.redeemReferral));
+
 export default router;

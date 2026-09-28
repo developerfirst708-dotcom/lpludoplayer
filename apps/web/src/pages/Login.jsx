@@ -1,23 +1,23 @@
 import React, { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { sendOtp, verifyOtp } from "../lib/auth.js";
 import { phoneSchema } from "@lpludo/shared/schemas"; // same zod schema as the server (S11)
 import { useToast } from "../components/Toast.jsx";
 import { Button, Card, Input } from "../components/ui.jsx";
 
-// Import your exact logo image directly into the code
-import lpLogo from "../assets/logo.png";
-
 /**
  * Login — mobile + OTP only. The display name is no longer collected here:
  * every new player is given a unique 5-letter code by the server on first
- * login (see apps/api/src/services/auth.service.js).
+ * login (see apps/api/src/services/auth.service.js). A ?ref=… link (the link
+ * shared from the Refer screen) prefills the referral code.
  */
 export default function Login() {
   const toast = useToast();
+  const [searchParams] = useSearchParams();
   const [step, setStep] = useState("phone");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
-  const [referral, setReferral] = useState("");
+  const [referral, setReferral] = useState((searchParams.get("ref") || "").toUpperCase());
   const [devOtp, setDevOtp] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -57,15 +57,11 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen flex-col justify-center gap-6 px-6 py-10">
-      <div className="flex flex-col items-center gap-2 text-center">
-        {/* Exact LP Logo integrated directly */}
-        <img
-          src={lpLogo}
-          alt="LP Ludo Logo"
-          className="h-28 w-28 rounded-full object-contain shadow-lg"
-        />
-        <h1 className="mt-2 text-3xl font-black tracking-tight text-ink">WELCOME</h1>
-        <p className="text-sm font-semibold text-slate-500">LP ludoplayer</p>
+      <div className="flex flex-col items-center gap-3 text-center">
+        {/* brand banner (public/logo.jpg — swap the file to rebrand) */}
+        <img src="/logo.jpg" alt="LP Ludo" className="w-full max-w-[330px] rounded-2xl shadow-card" />
+        <h1 className="text-2xl font-black tracking-tight text-ink">WELCOME</h1>
+        <p className="text-sm font-semibold text-slate-500">LP Ludo Player — 1v1 Ludo battles for real money</p>
       </div>
 
       <Card className="p-5">

@@ -14,6 +14,9 @@ const walletSchema = new mongoose.Schema(
     totalPaise: { type: Number, required: true, min: 0, default: 0 },
     heldPaise: { type: Number, required: true, min: 0, default: 0 },
 
+    /** lifetime referral earnings — not playable, redeemable to totalPaise */
+    referralPaise: { type: Number, required: true, min: 0, default: 0 },
+
     /** counter fields for the dashboard, updated by the ledger service */
     totals: {
       depositedPaise: { type: Number, default: 0 },
@@ -22,6 +25,7 @@ const walletSchema = new mongoose.Schema(
       lostPaise: { type: Number, default: 0 },
       battlesPlayed: { type: Number, default: 0 },
       battlesWon: { type: Number, default: 0 },
+      referralEarnedPaise: { type: Number, default: 0 },
     },
 
     /** per-contest running net total (admin dispute screen) — key = contestId */

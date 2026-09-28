@@ -165,12 +165,95 @@ test("insufficient balance cannot join and leaves the battle intact", async () =
 
 test("expiry sweep refunds the creator of a stale open battle", async () => {
   const before = (await request(app).get("/api/user/profile").set("Authorization", `Bearer ${tokens.B}`)).body.wallet.totalPaise;
-  const c = await request(app).post("/api/contests").set("Authorization", `Bearer ${tokens.B}`).send({ stake: 5000 });
+  // B already holds an open ₹50 battle — a second one must use a different amount
+  const c = await request(app).post("/api/contests").set("Authorization", `Bearer ${tokens.B}`).send({ stake: 10000 });
+  assert.equal(c.status, 201, JSON.stringify(c.body));
   await Contest.updateOne({ _id: c.body.contest.id }, { expiresAt: new Date(Date.now() - 1000) });
   const n = await expireStaleOpenContests();
   assert.equal(n >= 1, true);
   const after = (await request(app).get("/api/user/profile").set("Authorization", `Bearer ${tokens.B}`)).body.wallet.totalPaise;
   assert.equal(after, before);
+});
+
+test("Adda Ludo guards: duplicate amount, max 2 open, join auto-cancels other open battles", async () => {
+  // B still holds one open ₹50 battle from the previous test
+  const dup = await request(app).post("/api/contests").set("Authorization", `Bearer ${tokens.B}`).send({ stake: 5000 });
+  assert.equal(dup.status, 409); // same amount twice is not allowed
+
+  const second = await request(app).post("/api/contests").set("Authorization", `Bearer ${tokens.B}`).send({ stake: 10000 });
+  assert.equal(second.status, 201, JSON.stringify(second.body));
+
+  const third = await request(app).post("/api/contests").set("Authorization", `Bearer ${tokens.B}`).send({ stake: 15000 });
+  assert.equal(third.status, 409); // maximum 2 searching battles
+
+  // G joins B's ₹100 battle -> B's other open battle is auto-cancelled and refunded
+  const G = await loginPlayer("9999000007");
+  await depositAndApprove(G.token, 50000, "UTRG000001");
+  const before = (await request(app).get("/api/user/profile").set("Authorization", `Bearer ${tokens.B}`)).body.wallet.totalPaise;
+  const joined = await request(app).post(`/api/contests/${second.body.contest.id}/join`).set("Authorization", `Bearer ${G.token}`);
+  assert.equal(joined.status, 200, JSON.stringify(joined.body));
+
+  const openLeft = await Contest.countDocuments({ "players.userId": ids.B, status: "open" });
+  assert.equal(openLeft, 0);
+  const after = (await request(app).get("/api/user/profile").set("Authorization", `Bearer ${tokens.B}`)).body.wallet.totalPaise;
+  assert.equal(after, before); // the cancelled battle's hold was released, not consumed
+
+  // while an unsubmitted battle runs, B cannot start another one (Adda rule)
+  const blocked = await request(app).post("/api/contests").set("Authorization", `Bearer ${tokens.B}`).send({ stake: 5000 });
+  assert.equal(blocked.status, 409);
+});
+
+test("referral: 2% of the referred winner's stake, then redeem to wallet", async () => {
+  // A's code is applied when E signs up
+  const aProfile = (await request(app).get("/api/user/profile").set("Authorization", `Bearer ${tokens.A}`)).body;
+  assert.ok(aProfile.referralCode, "A should have a referral code");
+
+  await request(app).post("/api/auth/send-otp").send({ phone: "9999000005" });
+  const eOtp = await redis.get("otp:code:9999000005");
+  const eRes = await request(app).post("/api/auth/verify-otp").send({ phone: "9999000005", otp: eOtp, referralCode: aProfile.referralCode });
+  assert.equal(eRes.status, 200, JSON.stringify(eRes.body));
+  const E = eRes.body.accessToken;
+  const eId = eRes.body.user.id;
+
+  await depositAndApprove(E, 1000000, "UTRE000001"); // ₹10,000 stake
+  const F = await loginPlayer("9999000006");
+  await depositAndApprove(F.token, 1000000, "UTRF000001");
+
+  // E (the referred player) wins a ₹10,000 battle
+  const created = await request(app).post("/api/contests").set("Authorization", `Bearer ${E}`).send({ stake: 1000000 });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const cid = created.body.contest.id;
+  // slab 2: 5% of the stake -> the winner's prize is ₹19,500
+  assert.equal(created.body.contest.prize, 1950000);
+
+  const joined = await request(app).post(`/api/contests/${cid}/join`).set("Authorization", `Bearer ${F.token}`);
+  assert.equal(joined.status, 200, JSON.stringify(joined.body));
+  await request(app).post(`/api/contests/${cid}/result`).set("Authorization", `Bearer ${E}`).send({ outcome: "won", screenshotKeys: [`${eId}/battle/proof.png`] });
+  const settled = await request(app).post(`/api/contests/${cid}/result`).set("Authorization", `Bearer ${F.token}`).send({ outcome: "lost" });
+  assert.equal(settled.body.contest.status, "approved");
+
+  // A (the referrer) earned 2% of the ₹10,000 stake = ₹200 referral balance
+  const referrals = (await request(app).get("/api/user/referrals").set("Authorization", `Bearer ${tokens.A}`)).body;
+  assert.equal(referrals.referralPaise, 20000);
+  assert.equal(referrals.totalEarnedPaise, 20000);
+  assert.equal(referrals.totalReferred, 1);
+  assert.equal(referrals.items[0].earnedPaise, 20000);
+
+  // redeem limits: below ₹200 fails, above the balance fails, exactly ₹200 works
+  const tooSmall = await request(app).post("/api/payments/referral/redeem").set("Authorization", `Bearer ${tokens.A}`).send({ amountPaise: 19900 });
+  assert.equal(tooSmall.status, 422);
+  const tooMuch = await request(app).post("/api/payments/referral/redeem").set("Authorization", `Bearer ${tokens.A}`).send({ amountPaise: 30000 });
+  assert.equal(tooMuch.status, 409);
+
+  const walletBefore = (await request(app).get("/api/wallet").set("Authorization", `Bearer ${tokens.A}`)).body;
+  const redeem = await request(app).post("/api/payments/referral/redeem").set("Authorization", `Bearer ${tokens.A}`).send({ amountPaise: 20000 });
+  assert.equal(redeem.status, 200, JSON.stringify(redeem.body));
+  assert.equal(redeem.body.wallet.referralPaise, 0);
+  assert.equal(redeem.body.wallet.totalPaise, walletBefore.totalPaise + 20000);
+
+  const rec = await reconcileWallet(ids.A);
+  assert.equal(rec.drift, 0);
+  assert.equal(rec.referralDrift, 0);
 });
 
 test("withdrawal: kyc gate -> hold -> admin pay -> ledger drift 0", async () => {

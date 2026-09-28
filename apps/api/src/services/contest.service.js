@@ -1,8 +1,9 @@
 import { Contest, CONTEST_STATES } from "../db/models/contest.model.js";
+import { User } from "../db/models/user.model.js";
 import { withTransaction } from "../db/connect.js";
 import { withLock } from "../db/redis.js";
 import {
-  computePrize, isTransitionAllowed, IllegalTransitionError,
+  computePrize, computeReferralCommission, isTransitionAllowed, IllegalTransitionError,
   ConflictError, NotFoundError, ForbiddenError, BadRequestError, isValidStake,
   TERMINAL_STATES,
 } from "@lpludo/shared";
@@ -16,12 +17,105 @@ const OPEN_LIST_TTL = 3; // seconds — cache for /contests/open (fixes P2)
 const OPEN_LIST_KEY = "contests:open:list:v1";
 const BATTLE_OPEN_TTL_MS = 10 * 60 * 1000; // unjoined battles die in 10 min
 
+/** Adda Ludo rule: a player may hold at most this many open (searching) battles. */
+export const MAX_SEARCHING_BATTLES = 2;
+
+/**
+ * Adda Ludo rule: a player with an unsubmitted active battle cannot start
+ * another one. `result_submitted` / `cancel_requested` only block while the
+ * player has not filed their own report yet.
+ */
+async function hasActiveUnsubmittedContest(userId) {
+  const active = await Contest.find({
+    "players.userId": userId,
+    status: {
+      $in: [
+        CONTEST_STATES.JOIN_REQUESTED,
+        CONTEST_STATES.RUNNING,
+        CONTEST_STATES.ROOM_SUBMITTED,
+        CONTEST_STATES.RESULT_SUBMITTED,
+        CONTEST_STATES.CANCEL_REQUESTED,
+      ],
+    },
+  }).select("status resultReports");
+
+  return active.some((c) => {
+    if (
+      c.status === CONTEST_STATES.RESULT_SUBMITTED ||
+      c.status === CONTEST_STATES.CANCEL_REQUESTED
+    ) {
+      return !(c.resultReports || []).some((r) => String(r.userId) === String(userId));
+    }
+    return true;
+  });
+}
+
+/**
+ * Adda Ludo rule: joining a battle auto-cancels the player's other open
+ * battles (creators of the joined battle included). Their stakes are REFUNDED
+ * inside each cancellation transaction — the reference app's version left the
+ * money locked (C1).
+ */
+async function cancelOtherOpenBattles(userId, excludeContestId) {
+  const others = await Contest.find({
+    "players.userId": userId,
+    status: CONTEST_STATES.OPEN,
+    _id: { $ne: excludeContestId },
+  }).select("_id stake");
+
+  for (const other of others) {
+    try {
+      const out = await withLock(`contest:${other._id}`, () =>
+        withTransaction(async (session) => {
+          const fresh = await Contest.findOne({ _id: other._id }).session(session);
+          if (!fresh || fresh.status !== CONTEST_STATES.OPEN) return null;
+          fresh.transition(CONTEST_STATES.CANCELLED, {
+            actor: userId,
+            note: "auto-cancelled: another battle was joined",
+          });
+          await fresh.save({ session });
+          const walletView = await walletService.refundEntryFee({
+            userId: fresh.players[0].userId,
+            contestId: fresh._id,
+            amountPaise: fresh.stake,
+            note: "Battle auto-cancelled — stake refunded",
+            session,
+          });
+          await invalidateOpenList();
+          return { contest: fresh, walletView };
+        })
+      );
+      if (out) {
+        emitContestUpdate(out.contest);
+        emitWalletUpdate(userId, out.walletView);
+        l.info({ contestId: String(other._id), userId: String(userId) }, "open battle auto-cancelled on join");
+      }
+    } catch (err) {
+      l.error({ contestId: String(other._id), err: err.message }, "auto-cancel of other open battle failed");
+    }
+  }
+  return others.length;
+}
+
 /**
  * Create an open battle. The creator's stake is HELD (not spent) so an
  * unmatched/cancelled battle refunds it — semantics the reference app got wrong.
  */
 export async function createContest({ userId, stakePaise, ip }) {
   if (!isValidStake(stakePaise)) throw new BadRequestError("Unknown stake amount");
+
+  // Adda Ludo guards: one active battle at a time, max 2 open, no same amount twice
+  if (await hasActiveUnsubmittedContest(userId)) {
+    throw new ConflictError("You have an active battle. Submit its result before starting a new one");
+  }
+  const openMine = await Contest.find({ "players.userId": userId, status: CONTEST_STATES.OPEN }).select("stake");
+  if (openMine.some((c) => c.stake === stakePaise)) {
+    throw new ConflictError(`You already have an open battle of ₹${stakePaise / 100}. Choose a different amount`);
+  }
+  if (openMine.length >= MAX_SEARCHING_BATTLES) {
+    throw new ConflictError("Maximum 2 open battles allowed. Cancel one first");
+  }
+
   await walletService.assertAvailable(userId, stakePaise);
 
   return withLock(`wallet:${userId}`, () =>
@@ -45,7 +139,12 @@ export async function createContest({ userId, stakePaise, ip }) {
 
 /** Second player joins an open battle → running. Both holds exist before play. */
 export async function joinContest({ userId, contestId, ip }) {
-  return withLock(`contest:${contestId}`, () =>
+  // Adda Ludo guard: no new bets while an active battle is pending
+  if (await hasActiveUnsubmittedContest(userId)) {
+    throw new ConflictError("You have an active battle. Submit its result before joining a new one");
+  }
+
+  const contest = await withLock(`contest:${contestId}`, () =>
     withLock(`wallet:${userId}`, () =>
       withTransaction(async (session) => {
         const contest = await Contest.findOne({ _id: contestId }).session(session);
@@ -67,6 +166,14 @@ export async function joinContest({ userId, contestId, ip }) {
       })
     )
   );
+
+  // Adda Ludo rule: joining cancels the creator's and the joiner's other open
+  // battles (each cancellation refunds that battle's creator hold).
+  const creatorId = contest.players.find((p) => p.seat === 1)?.userId;
+  if (creatorId) await cancelOtherOpenBattles(creatorId, contestId);
+  await cancelOtherOpenBattles(userId, contestId);
+
+  return contest;
 }
 
 /**
@@ -165,6 +272,21 @@ export async function settleContest({ contestId, winnerUserId, settledBy, sessio
     userId: winner.userId, contestId, amountPaise: b.prizePaise, settledBy, session,
   });
 
+  // lifetime referral commission: 2% of the winner's stake to their referrer
+  // (same transaction + idempotency key, so a retried settle pays it exactly once)
+  const winnerDoc = await User.findById(winner.userId).select("referral.referredBy").session(session);
+  const referrerId = winnerDoc?.referral?.referredBy || null;
+  let referrerWallet = null;
+  if (referrerId) {
+    const commissionPaise = computeReferralCommission(contest.stake);
+    if (commissionPaise > 0) {
+      referrerWallet = await walletService.creditReferralCommission({
+        referrerId, referredUserId: winner.userId, contestId: contest._id,
+        amountPaise: commissionPaise, session,
+      });
+    }
+  }
+
   contest.settlement = {
     prizePaise: b.prizePaise,
     commissionPaise: b.commissionPaise,
@@ -175,8 +297,11 @@ export async function settleContest({ contestId, winnerUserId, settledBy, sessio
   contest.transition(CONTEST_STATES.APPROVED, { actor: settledBy, note: "settled" });
   await contest.save({ session });
 
-  l.info({ contestId: String(contestId), winner: String(winner.userId), prizePaise: b.prizePaise, settledBy }, "contest settled");
-  return { contest, wallet, loserWallet };
+  l.info(
+    { contestId: String(contestId), winner: String(winner.userId), prizePaise: b.prizePaise, settledBy },
+    "contest settled"
+  );
+  return { contest, wallet, loserWallet, referrerId, referrerWallet };
 }
 
 /** Admin/system verdict on a submitted result. */
@@ -191,6 +316,8 @@ export async function decideContest({ contestId, winnerUserId, settledBy = "admi
       const loserId = result.contest.players.find((p) => p.userId.toString() !== winnerUserId.toString())?.userId;
       if (loserId) emitWalletUpdate(loserId, result.loserWallet);
     }
+    // the winner's referrer earned a commission in the same transaction
+    if (result.referrerId && result.referrerWallet) emitWalletUpdate(result.referrerId, result.referrerWallet);
   }
   return result;
 }

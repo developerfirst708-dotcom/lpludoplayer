@@ -482,6 +482,7 @@ export async function settingsDetail(_req, res) {
     /** instant gateway is used BELOW this; manual UPI/UTR at or above it */
     depositGatewayMaxPaise: s.depositGatewayMaxPaise,
     maintenanceMode: Boolean(s.maintenanceMode),
+    supportWhatsapp: s.supportWhatsapp || "",
     updatedAt: s.updatedAt,
   });
 }
@@ -500,6 +501,7 @@ export async function updateSettings(req, res) {
     s.depositGatewayMaxPaise = data.depositGatewayMaxPaise;
   }
   if (data.maintenanceMode !== undefined) s.maintenanceMode = data.maintenanceMode;
+  if (data.supportWhatsapp !== undefined) s.supportWhatsapp = data.supportWhatsapp;
   s.updatedBy = req.user.id;
   await s.save();
   await writeAudit(req.user.id, "settings.update", "settings", s._id, data);
@@ -509,5 +511,6 @@ export async function updateSettings(req, res) {
     depositUpiName: s.depositUpiName,
     depositGatewayMaxPaise: s.depositGatewayMaxPaise,
     maintenanceMode: s.maintenanceMode,
+    supportWhatsapp: s.supportWhatsapp || "",
   });
 }

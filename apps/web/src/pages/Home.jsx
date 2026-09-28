@@ -5,7 +5,6 @@ import { api } from "../lib/api.js";
 import { socket } from "../lib/socket.js";
 import { Money, Panel, SectionTitle, StatusBadge } from "../components/ui.jsx";
 import { GiftIcon } from "../components/art.jsx";
-import LudoBoardArt from "../components/LudoBoardArt.jsx";
 
 const LIVE_STATUSES = ["open", "running", "room_submitted", "result_submitted", "cancel_requested"];
 
@@ -17,12 +16,12 @@ const LIVE_STATUSES = ["open", "running", "room_submitted", "result_submitted", 
  * with the referral banner, game cards and your live battles.
  */
 
-/** One game card: dark starfield visual on top, white info footer below. */
-function GameCard({ title, subtitle, cta, onPlay, disabled = false }) {
+/** One game card: poster visual on top, white info footer below. */
+function GameCard({ title, subtitle, cta, image, imageAlt, onPlay, disabled = false }) {
   return (
     <article className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card" data-purpose="game-card">
-      <div className="game-thumb-container flex h-44 w-full items-center justify-center">
-        <LudoBoardArt className="h-[168px] w-auto drop-shadow-2xl" />
+      <div className="h-44 w-full overflow-hidden bg-gray-100">
+        <img src={image} alt={imageAlt} loading="lazy" className="h-full w-full object-cover" />
       </div>
       <div className="flex items-center justify-between gap-3 border-t border-gray-50 bg-white px-4 py-3.5">
         <div className="min-w-0 space-y-0.5">
@@ -71,6 +70,11 @@ export default function Home() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Brand banner (public/logo.jpg) */}
+      <section className="overflow-hidden rounded-2xl shadow-card" data-purpose="welcome-banner">
+        <img src="/logo.jpg" alt="LPLUDO" className="h-auto w-full" />
+      </section>
+
       {/* Referral banner (verbatim from the sample) */}
       <section
         className="flex items-center gap-3 rounded-xl border border-[#FAD655] bg-gradient-to-b from-[#FEF4BA] via-[#FDE88C] to-[#FCD95B] p-3.5 shadow-sm"
@@ -81,12 +85,12 @@ export default function Home() {
         </div>
         <div className="flex-1">
           <p className="text-[13.5px] font-extrabold leading-snug tracking-tight text-neutral-950">
-            Refer and Earn 5% Commission Lifetime!!
+            Refer and Earn 2% Commission Lifetime!!
           </p>
         </div>
       </section>
 
-      {/* Games header + cards */}
+      {/* Games header + cards (posters: public/game1.jpg + public/game2.jpeg) */}
       <SectionTitle title="Games" hint="Classic Web Ludo is live. More formats are on the way." />
 
       <div className="flex flex-col gap-4">
@@ -94,9 +98,18 @@ export default function Home() {
           title="Classic Web Ludo"
           subtitle="Play the Most Popular Ludo Game Format"
           cta="Play Now"
+          image="/game1.jpg"
+          imageAlt="Classic Ludo poster"
           onPlay={() => navigate("/play")}
         />
-        <GameCard title="Classic App Ludo" subtitle="Ludo King Mode is now available!" cta="Coming Soon" disabled />
+        <GameCard
+          title="Classic App Ludo"
+          subtitle="Ludo King Mode is now available!"
+          cta="Coming Soon"
+          image="/game2.jpeg"
+          imageAlt="Classic App Ludo poster"
+          disabled
+        />
       </div>
 
       {/* ---- live battle ---- */}

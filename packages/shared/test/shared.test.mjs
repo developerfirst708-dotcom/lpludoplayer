@@ -4,7 +4,10 @@ import {
   rupeesToPaise, paiseToRupees, formatPaise, sumPaise, splitPaiseEvenly,
   MoneyError,
 } from "../src/money.js";
-import { computePrize, settleSplit, isValidStake, COMMISSION_BPS } from "../src/prize.js";
+import {
+  computePrize, settleSplit, isValidStake, computeReferralCommission,
+  COMMISSION_BPS_SLAB_1, COMMISSION_BPS_SLAB_2, REFERRAL_COMMISSION_BPS,
+} from "../src/prize.js";
 import {
   TRANSITIONS, isTransitionAllowed, transition, isTerminal,
   IllegalTransitionError, SETTLEMENT_BY_STATE, CONTEST_STATES,
@@ -53,30 +56,62 @@ test("splitPaiseEvenly never loses or invents paise", () => {
   }
 });
 
-test("prize maths: pool, 5% commission, winner amount", () => {
+test("prize maths: Adda Ludo slab 1 (10% of the stake up to ₹500)", () => {
   const b = computePrize(5000); // ₹50 entry
-  assert.equal(b.totalPoolPaise, 10000);      // ₹100 pool
-  assert.equal(b.commissionPaise, 500);       // ₹5 (5%)
-  assert.equal(b.prizePaise, 9500);           // ₹95 to winner
+  assert.equal(b.totalPoolPaise, 10000); // ₹100 pool
+  assert.equal(b.commissionPaise, 500); // 10% of the stake = ₹5
+  assert.equal(b.prizePaise, 9500); // ₹95 to winner
   assert.equal(b.winAmountPaise, 9500);
+  assert.equal(b.commissionBps, COMMISSION_BPS_SLAB_1);
+
+  const mid = computePrize(10000); // ₹100 entry
+  assert.equal(mid.commissionPaise, 1000);
+  assert.equal(mid.prizePaise, 19000); // ₹190
+
+  const edge = computePrize(50000); // ₹500 entry — still slab 1
+  assert.equal(edge.commissionPaise, 5000);
+  assert.equal(edge.prizePaise, 95000); // ₹950
+});
+
+test("prize maths: Adda Ludo slab 2 (5% of the stake above ₹500)", () => {
+  const b = computePrize(55000); // ₹550 entry
+  assert.equal(b.commissionPaise, 2750); // 5% of ₹550 = ₹27.50
+  assert.equal(b.prizePaise, 107250); // ₹1072.50 → same as floor(pool − platformFee)
+  assert.equal(b.commissionBps, COMMISSION_BPS_SLAB_2);
+
+  const k = computePrize(100000); // ₹1,000 entry
+  assert.equal(k.commissionPaise, 5000); // ₹50
+  assert.equal(k.prizePaise, 195000); // ₹1,950
+
+  const max = computePrize(10000000); // ₹1,00,000 entry
+  assert.equal(max.commissionPaise, 500000); // ₹5,000
+  assert.equal(max.prizePaise, 19500000); // ₹1,95,000
 });
 
 test("settle split sums exactly to the pool for every stake", () => {
-  for (const stake of [5000, 10000, 25000, 50000]) {
+  for (const stake of [5000, 10000, 25000, 50000, 55000, 100000, 10000000]) {
     const s = settleSplit(stake);
     assert.ok(s.checksum, `split checksum failed for stake ${stake}`);
   }
 });
 
-test("commission basis points are respected", () => {
-  assert.equal(COMMISSION_BPS, 500);
-  const b = computePrize(50000);
-  assert.equal(b.commissionPaise, Math.floor(100000 * 0.05));
+test("Adda Ludo stake rules: ₹50–₹1,00,000 in ₹50 steps", () => {
+  assert.equal(isValidStake(5000), true); // ₹50
+  assert.equal(isValidStake(5500), false); // not a multiple of ₹50
+  assert.equal(isValidStake(4999), false); // below minimum
+  assert.equal(isValidStake(2500), false);
+  assert.equal(isValidStake(55000), true); // ₹550 — custom amount
+  assert.equal(isValidStake(10000000), true); // ₹1,00,000 — maximum
+  assert.equal(isValidStake(10000500), false); // above maximum
+  assert.equal(isValidStake(5001), false); // not a multiple of ₹50
+  assert.equal(isValidStake("5000"), false); // integers only
 });
 
-test("stake whitelist", () => {
-  assert.equal(isValidStake(5000), true);
-  assert.equal(isValidStake(5001), false);
+test("referral commission is 2% of the winner's stake", () => {
+  assert.equal(REFERRAL_COMMISSION_BPS, 200);
+  assert.equal(computeReferralCommission(5000), 100); // ₹50 -> ₹1
+  assert.equal(computeReferralCommission(55000), 1100); // ₹550 -> ₹11
+  assert.equal(computeReferralCommission(10000000), 200000); // ₹1,00,000 -> ₹2,000
 });
 
 test("only whitelisted state transitions are allowed", () => {

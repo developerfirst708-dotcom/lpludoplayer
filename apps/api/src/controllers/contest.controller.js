@@ -3,7 +3,7 @@ import { walletView } from "../services/wallet.service.js";
 import { Contest, CONTEST_STATES } from "../db/models/contest.model.js";
 import { User } from "../db/models/user.model.js";
 import { createContestSchema, submitRoomSchema, submitResultSchema } from "@lpludo/shared/schemas";
-import { NotFoundError, ForbiddenError, ConflictError, BadRequestError } from "@lpludo/shared";
+import { NotFoundError, ForbiddenError, ConflictError, BadRequestError, computePrize } from "@lpludo/shared";
 import { validate } from "@lpludo/shared/schemas";
 import { emitContestUpdate, emitWalletUpdate } from "../realtime/io.js";
 import { log } from "../config/logger.js";
@@ -30,7 +30,7 @@ function contestDto(contest, { userId, includeRoomCode = false } = {}) {
       name: p.userId?.name || null,
       isYou: Boolean(userId && String(p.userId._id || p.userId) === String(userId)),
     })),
-    prize: contest.stake * 2 - Math.floor((contest.stake * 2 * 500) / 10000), // winner's credit
+    prize: computePrize(contest.stake).prizePaise, // winner's credit (slab-based, same maths as settlement)
     conflict: contest.conflict?.active ? { raisedBy: contest.conflict.raisedBy } : null,
     roomCode: includeRoomCode && isParticipant ? contest.roomCode || null : null, // only the 2 players
     // both players' result claims + proof screenshot keys — participants only
