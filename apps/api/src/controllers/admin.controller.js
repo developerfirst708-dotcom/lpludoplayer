@@ -10,10 +10,12 @@ import { getSettings } from "../db/models/settings.model.js";
 import { adminLoginSchema, adminSettleSchema, adminReviewSchema } from "@lpludo/shared/schemas";
 import {
   validate, adminUserActionSchema, adminKycReviewSchema, adminSettingsSchema,
+  adminAccountCreateSchema, adminAccountUpdateSchema, adminAdjustmentSchema,
 } from "../validation/extraSchemas.js";
+import { sanitizePermissions } from "../utils/permissions.js";
 import * as contestService from "../services/contest.service.js";
 import * as walletService from "../services/wallet.service.js";
-import { checkPassword } from "../services/auth.service.js";
+import { checkPassword, hashPassword } from "../services/auth.service.js";
 import { issueTokens } from "../controllers/auth.controller.js";
 import { writeAudit } from "../services/audit.service.js";
 import { emitToUser, emitAdminRefresh, emitContestUpdate, emitWalletUpdate } from "../realtime/io.js";
@@ -23,57 +25,125 @@ import { log } from "../config/logger.js";
 
 const l = log("admin.controller");
 
+/** the shape every admin session hands to the panel (includes permissions) */
+function adminView(u) {
+  return {
+    id: u._id, name: u.name, phone: u.phone || null, email: u.email || null,
+    role: u.role, permissions: u.permissions || [],
+  };
+}
+
 /* -------------------------------- auth -------------------------------- */
 
+/** POST /admin/login — mobile number + password (superadmin / admin / agent) */
 export async function login(req, res) {
-  const { email, password } = validate(adminLoginSchema, req.body);
-  const user = await User.findOne({ email: email.toLowerCase() }).select("+passwordHash +tokenVersion");
-  if (!user || !["admin", "superadmin"].includes(user.role)) {
-    throw new UnauthorizedError("Incorrect email or password");
+  const { phone, password } = validate(adminLoginSchema, req.body);
+  const user = await User.findOne({ phone }).select("+passwordHash +tokenVersion +phone");
+  if (!user || !["admin", "superadmin", "agent"].includes(user.role)) {
+    throw new UnauthorizedError("Incorrect mobile number or password");
   }
   await checkPassword(user, password);
-  if (user.status === "banned") throw new UnauthorizedError("This admin is banned");
+  if (user.status === "banned") throw new UnauthorizedError("This account is banned");
 
   const tokens = issueTokens(res, user);
   await writeAudit(user._id, "admin.login", "user", user._id, { ip: req.ip });
   l.info({ adminId: String(user._id) }, "admin login");
-  res.json({
-    accessToken: tokens.accessToken,
-    admin: { id: user._id, name: user.name, email: user.email, role: user.role },
-  });
+  res.json({ accessToken: tokens.accessToken, admin: adminView(user) });
+}
+
+/** GET /admin/me — the current session (role + permissions) */
+export async function me(req, res) {
+  const u = await User.findById(req.user.id).select("+phone");
+  if (!u) throw new NotFoundError("Admin not found");
+  res.json({ admin: adminView(u) });
 }
 
 /* ----------------------------- dashboard ------------------------------ */
 
-/** O(1)-ish summary (fixes P5: no more ~20 scans every 10s) */
-export async function dashboardSummary(_req, res) {
-  const [walletAgg, userCount, contestCounts, pendingDeposits, pendingWithdrawals, pendingKyc, recentLedger] =
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+/** midnight in IST, as a UTC Date (the reference panel's "today" window) */
+function istDayStart() {
+  const istNow = new Date(Date.now() + IST_OFFSET_MS);
+  const midnight = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate()));
+  return new Date(midnight.getTime() - IST_OFFSET_MS);
+}
+
+/** money metrics for one time window, straight from the ledger + settled contests */
+async function rangeMetrics(fromDate) {
+  const range = { createdAt: { $gte: fromDate } };
+  const [dep, wd, bon, pen, ref, comm, matches] = await Promise.all([
+    LedgerEntry.aggregate([{ $match: { type: "deposit", ...range } }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
+    LedgerEntry.aggregate([{ $match: { type: "withdrawal_paid", ...range } }, { $group: { _id: null, t: { $sum: { $multiply: ["$amount", -1] } } } }]),
+    LedgerEntry.aggregate([{ $match: { type: "adjustment", "metadata.kind": "bonus", ...range } }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
+    LedgerEntry.aggregate([{ $match: { type: "adjustment", "metadata.kind": "penalty", ...range } }, { $group: { _id: null, t: { $sum: { $multiply: ["$amount", -1] } } } }]),
+    LedgerEntry.aggregate([{ $match: { type: "referral_commission", ...range } }, { $group: { _id: null, t: { $sum: "$referralDelta" } } }]),
+    Contest.aggregate([{ $match: { status: "approved", "settlement.settledAt": { $gte: fromDate } } }, { $group: { _id: null, t: { $sum: "$settlement.commissionPaise" } } }]),
+    Contest.countDocuments({ status: "approved", "settlement.settledAt": { $gte: fromDate } }),
+  ]);
+  const s = (agg) => agg[0]?.t || 0;
+  return {
+    deposit: s(dep), withdraw: s(wd), bonus: s(bon), penalty: s(pen),
+    referral: s(ref), commission: s(comm), matches,
+  };
+}
+
+/**
+ * GET /admin/dashboard?filter=all|today
+ * Every card the panel shows: users, deposits, withdrawals, commission,
+ * referral earnings, hold balance (money locked in running battles + pending
+ * withdrawals), total wallet balance, matches, bonus and penalty. The `today`
+ * block always carries today's window so the "Today" view is one fetch.
+ */
+export async function dashboardStats(req, res) {
+  const filter = req.query.filter === "today" ? "today" : "all";
+  const startOfDay = istDayStart();
+
+  const [all, today, walletAgg, totalUsers, newUsers, pendingDeposits, pendingWithdrawals, pendingKyc, contestCounts, recentLedger] =
     await Promise.all([
-      Wallet.aggregate([{ $group: { _id: null, gav: { $sum: { $subtract: ["$totalPaise", "$heldPaise"] } }, held: { $sum: "$heldPaise" } } }]),
+      rangeMetrics(new Date(0)),
+      rangeMetrics(startOfDay),
+      Wallet.aggregate([{ $group: { _id: null, total: { $sum: "$totalPaise" }, held: { $sum: "$heldPaise" } } }]),
       User.countDocuments({ role: "player" }),
-      Contest.aggregate([{ $group: { _id: "$status", n: { $sum: 1 }, stake: { $sum: "$stake" } } }]),
+      User.countDocuments({ role: "player", createdAt: { $gte: startOfDay } }),
       DepositRequest.countDocuments({ status: "pending" }),
       WithdrawalRequest.countDocuments({ status: "requested" }),
       User.countDocuments({ "kyc.status": "pending" }),
+      Contest.aggregate([{ $group: { _id: "$status", n: { $sum: 1 } } }]),
       LedgerEntry.find().sort({ createdAt: -1 }).limit(10).populate("userId", "name").lean(),
     ]);
 
-  const byStatus = Object.fromEntries(contestCounts.map((r) => [r._id, { n: r.n, stakePaise: r.stake }]));
-  const settled = byStatus.approved || { n: 0, stakePaise: 0 };
-  const commissionPaise = Math.floor((settled.stakePaise * 2 * 500) / 10000);
+  const byStatus = Object.fromEntries(contestCounts.map((r) => [r._id, r.n]));
+  const running = (byStatus.running || 0) + (byStatus.room_submitted || 0) + (byStatus.result_submitted || 0);
+  const completed = byStatus.approved || 0;
+  const cancelled = (byStatus.cancelled || 0) + (byStatus.expired || 0);
+  const pendingMatches = (byStatus.open || 0) + (byStatus.join_requested || 0) + (byStatus.cancel_requested || 0);
+  const totalContests = Object.values(byStatus).reduce((a, b) => a + b, 0);
 
   res.json({
-    gavPaise: walletAgg[0]?.gav || 0,
-    heldPaise: walletAgg[0]?.held || 0,
-    users: userCount,
-    contests: {
-      open: byStatus.open?.n || 0,
-      running: (byStatus.running?.n || 0) + (byStatus.room_submitted?.n || 0) + (byStatus.result_submitted?.n || 0),
-      conflict: byStatus.cancel_requested?.n || 0,
-      settled: settled.n,
-    },
-    commissionPaise,
+    filter,
+    totalUsers,
+    totalDeposit: all.deposit,
+    totalWithdraw: all.withdraw,
+    totalCommission: all.commission,
+    totalReferral: all.referral,
+    totalBonus: all.bonus,
+    totalPenalty: all.penalty,
+    totalMatches: all.matches,
+    holdBalance: walletAgg[0]?.held || 0,
+    walletBalance: walletAgg[0]?.total || 0,
+    contests: { open: byStatus.open || 0, running, completed, cancelled, pending: pendingMatches, total: totalContests },
     pending: { deposits: pendingDeposits, withdrawals: pendingWithdrawals, kyc: pendingKyc },
+    today: {
+      newUsers,
+      deposit: today.deposit,
+      withdraw: today.withdraw,
+      commission: today.commission,
+      referral: today.referral,
+      bonus: today.bonus,
+      penalty: today.penalty,
+      matches: today.matches,
+    },
     recentLedger: recentLedger.map((r) => ({
       id: r._id, type: r.type, amountPaise: r.amount,
       userName: r.userId?.name || "unknown", createdAt: r.createdAt,
@@ -88,6 +158,9 @@ export async function listUsers(req, res) {
   const { page, limit } = validate(paginationSchema, req.query);
   const q = String(req.query.q || "").trim();
   const filter = { role: "player" };
+  // all | active | banned (blocked)
+  const status = String(req.query.status || "");
+  if (status === "active" || status === "banned") filter.status = status;
   if (q) {
     const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
     filter.$or = [{ name: rx }, { phone: rx }];
@@ -112,6 +185,49 @@ export async function listUsers(req, res) {
   });
 }
 
+/** GET /admin/users/:id — one player's wallet, deposits/withdrawals, bonus/penalty, KYC */
+export async function userDetail(req, res) {
+  const user = await User.findById(req.params.id).select("+phone").lean();
+  if (!user) throw new NotFoundError("User not found");
+
+  const wallet = await Wallet.findOne({ userId: user._id }).lean();
+  const [bonus, penalty] = await Promise.all([
+    LedgerEntry.aggregate([
+      { $match: { userId: user._id, type: "adjustment", "metadata.kind": "bonus" } },
+      { $group: { _id: null, t: { $sum: "$amount" } } },
+    ]),
+    LedgerEntry.aggregate([
+      { $match: { userId: user._id, type: "adjustment", "metadata.kind": "penalty" } },
+      { $group: { _id: null, t: { $sum: { $multiply: ["$amount", -1] } } } },
+    ]),
+  ]);
+
+  res.json({
+    id: user._id,
+    name: user.name,
+    phone: user.phone || null,
+    status: user.status,
+    kycStatus: user.kyc?.status || "not_submitted",
+    createdAt: user.createdAt,
+    lastActiveAt: user.lastActiveAt || null,
+    wallet: {
+      availablePaise: wallet ? wallet.totalPaise - wallet.heldPaise : 0,
+      totalPaise: wallet?.totalPaise || 0,
+      heldPaise: wallet?.heldPaise || 0,
+      referralPaise: wallet?.referralPaise || 0,
+      wonPaise: wallet?.totals?.wonPaise || 0,
+    },
+    totals: {
+      depositedPaise: wallet?.totals?.depositedPaise || 0,
+      withdrawnPaise: wallet?.totals?.withdrawnPaise || 0,
+      bonusPaise: bonus[0]?.t || 0,
+      penaltyPaise: penalty[0]?.t || 0,
+      battlesPlayed: wallet?.totals?.battlesPlayed || 0,
+      battlesWon: wallet?.totals?.battlesWon || 0,
+    },
+  });
+}
+
 export async function userAction(req, res) {
   const { userId, action, reason } = validate(adminUserActionSchema, req.body);
   const user = await User.findById(userId).select("+tokenVersion");
@@ -130,8 +246,11 @@ export async function userAction(req, res) {
 
 export async function listKyc(req, res) {
   const { page, limit } = validate(paginationSchema, req.query);
-  const filter = { "kyc.status": { $in: ["pending", "verified", "rejected"] } };
-  if (req.query.status) filter["kyc.status"] = req.query.status;
+  // all | pending | approved(verified) | rejected | not_submitted
+  const status = String(req.query.status || "all");
+  const filter = { role: "player" };
+  if (status === "approved") filter["kyc.status"] = "verified";
+  else if (status && status !== "all") filter["kyc.status"] = status;
   const [items, total] = await Promise.all([
     User.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).select("+phone").lean(),
     User.countDocuments(filter),
@@ -140,7 +259,8 @@ export async function listKyc(req, res) {
     items: items.map((u) => ({
       id: u._id, name: u.name, phone: u.phone,
       kyc: {
-        status: u.kyc.status, holderName: u.kyc.holderName, upiId: u.kyc.upiId,
+        status: u.kyc.status, holderName: u.kyc.holderName,
+        dob: u.kyc.dob, docType: u.kyc.docType, docNumber: u.kyc.docNumber,
         docFrontKey: u.kyc.docFrontKey, docBackKey: u.kyc.docBackKey,
         rejectReason: u.kyc.rejectReason || null, reviewedAt: u.kyc.reviewedAt || null,
       },
@@ -321,15 +441,36 @@ export async function reviewWithdrawal(req, res) {
 
 /* ------------------------------- contests ----------------------------- */
 
+/** tab → contest statuses (reference panel's running / pending / completed / cancelled) */
+const CONTEST_GROUPS = {
+  running: ["running", "room_submitted", "result_submitted"],
+  pending: ["open", "join_requested", "cancel_requested"],
+  completed: ["approved"],
+  cancelled: ["cancelled", "expired"],
+};
+
 export async function listContests(req, res) {
   const { page, limit } = validate(paginationSchema, req.query);
   const filter = {};
-  if (req.query.status) filter.status = req.query.status;
-  const [items, total] = await Promise.all([
+  const group = String(req.query.group || "");
+  if (CONTEST_GROUPS[group]) filter.status = { $in: CONTEST_GROUPS[group] };
+  else if (req.query.status) filter.status = req.query.status;
+
+  const [items, total, countsAgg] = await Promise.all([
     Contest.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)
       .populate("players.userId", "name phone").lean(),
     Contest.countDocuments(filter),
+    Contest.aggregate([{ $group: { _id: "$status", n: { $sum: 1 } } }]),
   ]);
+
+  const byStatus = Object.fromEntries(countsAgg.map((r) => [r._id, r.n]));
+  const counts = {
+    running: (byStatus.running || 0) + (byStatus.room_submitted || 0) + (byStatus.result_submitted || 0),
+    pending: (byStatus.open || 0) + (byStatus.join_requested || 0) + (byStatus.cancel_requested || 0),
+    completed: byStatus.approved || 0,
+    cancelled: (byStatus.cancelled || 0) + (byStatus.expired || 0),
+    total: Object.values(byStatus).reduce((a, b) => a + b, 0),
+  };
   res.json({
     items: items.map((c) => ({
       id: c._id, stake: c.stake, status: c.status, createdAt: c.createdAt,
@@ -342,7 +483,7 @@ export async function listContests(req, res) {
       })),
       winnerUserId: c.winnerUserId || null,
     })),
-    total, page, limit,
+    total, page, limit, counts,
   });
 }
 
@@ -512,5 +653,196 @@ export async function updateSettings(req, res) {
     depositGatewayMaxPaise: s.depositGatewayMaxPaise,
     maintenanceMode: s.maintenanceMode,
     supportWhatsapp: s.supportWhatsapp || "",
+  });
+}
+
+/* --------------------------- bonus / penalty -------------------------- */
+
+/** find the target player by user id or mobile number */
+async function resolveAdjustUser({ userId, phone }) {
+  const user = userId
+    ? await User.findById(userId).select("+phone")
+    : await User.findOne({ phone }).select("+phone");
+  if (!user) throw new NotFoundError("Player not found");
+  return user;
+}
+
+/** POST /admin/bonus — credit an admin bonus to a player's wallet */
+export async function addBonus(req, res) {
+  const { userId, phone, amountPaise, note } = validate(adminAdjustmentSchema, req.body);
+  const user = await resolveAdjustUser({ userId, phone });
+  const view = await walletService.adminAdjustment({
+    userId: user._id, amountPaise, kind: "bonus", note, actorId: req.user.id,
+  });
+  await writeAudit(req.user.id, "wallet.bonus", "user", user._id, { amountPaise, note });
+  emitWalletUpdate(user._id, view);
+  emitAdminRefresh();
+  res.json({ id: user._id, wallet: view, message: "Bonus added" });
+}
+
+/** POST /admin/penalty — debit a penalty from a player's wallet */
+export async function addPenalty(req, res) {
+  const { userId, phone, amountPaise, note } = validate(adminAdjustmentSchema, req.body);
+  const user = await resolveAdjustUser({ userId, phone });
+  let view;
+  try {
+    view = await walletService.adminAdjustment({
+      userId: user._id, amountPaise: -amountPaise, kind: "penalty", note, actorId: req.user.id,
+    });
+  } catch (err) {
+    if (err?.name === "WalletError") throw new BadRequestError("The player does not have enough balance for this penalty");
+    throw err;
+  }
+  await writeAudit(req.user.id, "wallet.penalty", "user", user._id, { amountPaise, note });
+  emitWalletUpdate(user._id, view);
+  emitAdminRefresh();
+  res.json({ id: user._id, wallet: view, message: "Penalty applied" });
+}
+
+/** GET /admin/settings-report — bonus + penalty history (newest first) */
+export async function settingsReport(_req, res) {
+  const rows = await LedgerEntry.find({ type: "adjustment" })
+    .sort({ createdAt: -1 })
+    .limit(400)
+    .populate("actorId", "name")
+    .lean();
+
+  const userIds = [...new Set(rows.map((r) => String(r.userId)))];
+  const users = userIds.length ? await User.find({ _id: { $in: userIds } }).select("+phone name").lean() : [];
+  const uMap = Object.fromEntries(users.map((u) => [String(u._id), u]));
+
+  const map = (r) => ({
+    id: r._id,
+    name: uMap[String(r.userId)]?.name || "—",
+    phone: uMap[String(r.userId)]?.phone || null,
+    amountPaise: Math.abs(r.amount),
+    reason: r.note || "",
+    balanceAfterPaise: r.balanceAfter,
+    adminName: r.actorId?.name || "Admin",
+    createdAt: r.createdAt,
+  });
+
+  res.json({
+    bonus: rows.filter((r) => r.metadata?.kind === "bonus").map(map),
+    penalty: rows.filter((r) => r.metadata?.kind === "penalty").map(map),
+  });
+}
+
+/* ------------------------- admin / agent control ---------------------- */
+
+/** GET /admin/admin-list — every admin / agent account (superadmin only) */
+export async function adminList(_req, res) {
+  const admins = await User.find({ role: { $in: ["superadmin", "admin", "agent"] } })
+    .select("+phone")
+    .sort({ createdAt: -1 })
+    .lean();
+  res.json({ items: admins.map(adminView) });
+}
+
+/** POST /admin/create-admin — create an admin or a permission-scoped agent */
+export async function createAdmin(req, res) {
+  const data = validate(adminAccountCreateSchema, req.body);
+  const exists = await User.findOne({ phone: data.phone }).select("+phone");
+  if (exists) throw new ConflictError("That mobile number is already registered");
+
+  const admin = new User({
+    name: data.name,
+    phone: data.phone,
+    email: data.email || undefined,
+    role: data.role,
+    status: "active",
+    passwordHash: await hashPassword(data.password),
+    permissions: data.role === "agent" ? sanitizePermissions(data.permissions) : [],
+  });
+  await admin.save();
+  await writeAudit(req.user.id, "admin.create", "user", admin._id, { role: data.role });
+  emitAdminRefresh();
+  res.status(201).json({ admin: adminView(admin) });
+}
+
+/** PATCH /admin/update/:id — edit an admin/agent (superadmin only) */
+export async function updateAdmin(req, res) {
+  const data = validate(adminAccountUpdateSchema, req.body);
+  const target = await User.findById(req.params.id).select("+passwordHash +tokenVersion +phone");
+  if (!target || !["superadmin", "admin", "agent"].includes(target.role)) {
+    throw new NotFoundError("Admin / Agent not found");
+  }
+  if (String(target._id) === String(req.user.id) && data.role && data.role !== target.role) {
+    throw new BadRequestError("You cannot change your own role");
+  }
+
+  if (data.name) target.name = data.name;
+  if (data.phone && data.phone !== target.phone) {
+    const dup = await User.findOne({ phone: data.phone, _id: { $ne: target._id } });
+    if (dup) throw new ConflictError("That mobile number is already registered");
+    target.phone = data.phone;
+  }
+  if (data.email !== undefined) target.email = data.email || undefined;
+  if (data.role) target.role = data.role;
+  if (data.password) {
+    target.passwordHash = await hashPassword(data.password);
+    target.tokenVersion = (target.tokenVersion || 0) + 1; // kill live sessions
+  }
+  target.permissions = target.role === "agent"
+    ? sanitizePermissions(data.permissions ?? target.permissions)
+    : [];
+
+  await target.save();
+  await writeAudit(req.user.id, "admin.update", "user", target._id, { role: target.role });
+  emitAdminRefresh();
+  res.json({ admin: adminView(target) });
+}
+
+/** DELETE /admin/delete/:id — remove an admin/agent (superadmin only) */
+export async function deleteAdmin(req, res) {
+  if (String(req.params.id) === String(req.user.id)) {
+    throw new BadRequestError("You cannot delete your own account");
+  }
+  const target = await User.findById(req.params.id);
+  if (!target || !["admin", "agent"].includes(target.role)) {
+    throw new BadRequestError("Only admin / agent accounts can be deleted");
+  }
+  await User.findByIdAndDelete(target._id);
+  await writeAudit(req.user.id, "admin.delete", "user", target._id, { role: target.role });
+  emitAdminRefresh();
+  res.json({ ok: true });
+}
+
+/** GET /admin/agent-report — per-admin/agent approvals, bonus and penalty */
+export async function agentReport(_req, res) {
+  const start = istDayStart();
+  const rows = await LedgerEntry.aggregate([
+    { $match: { actorId: { $ne: null }, type: { $in: ["deposit", "withdrawal_paid", "adjustment"] } } },
+    {
+      $group: {
+        _id: "$actorId",
+        totalDeposit: { $sum: { $cond: [{ $eq: ["$type", "deposit"] }, "$amount", 0] } },
+        totalWithdraw: { $sum: { $cond: [{ $eq: ["$type", "withdrawal_paid"] }, { $multiply: ["$amount", -1] }, 0] } },
+        totalBonus: { $sum: { $cond: [{ $and: [{ $eq: ["$type", "adjustment"] }, { $eq: ["$metadata.kind", "bonus"] }] }, "$amount", 0] } },
+        totalPenalty: { $sum: { $cond: [{ $and: [{ $eq: ["$type", "adjustment"] }, { $eq: ["$metadata.kind", "penalty"] }] }, { $multiply: ["$amount", -1] }, 0] } },
+        totalCount: { $sum: 1 },
+        todayDeposit: { $sum: { $cond: [{ $and: [{ $eq: ["$type", "deposit"] }, { $gte: ["$createdAt", start] }] }, "$amount", 0] } },
+        todayWithdraw: { $sum: { $cond: [{ $and: [{ $eq: ["$type", "withdrawal_paid"] }, { $gte: ["$createdAt", start] }] }, { $multiply: ["$amount", -1] }, 0] } },
+      },
+    },
+    { $sort: { totalDeposit: -1 } },
+  ]);
+
+  const ids = rows.map((r) => r._id);
+  const users = ids.length ? await User.find({ _id: { $in: ids } }).select("+phone name email role").lean() : [];
+  const uMap = Object.fromEntries(users.map((u) => [String(u._id), u]));
+
+  res.json({
+    items: rows.map((r) => {
+      const u = uMap[String(r._id)] || {};
+      return {
+        id: r._id, name: u.name || "Unknown", phone: u.phone || null, email: u.email || null,
+        role: u.role || "admin",
+        totalDepositPaise: r.totalDeposit, totalWithdrawPaise: r.totalWithdraw,
+        todayDepositPaise: r.todayDeposit, todayWithdrawPaise: r.todayWithdraw,
+        totalBonusPaise: r.totalBonus, totalPenaltyPaise: r.totalPenalty,
+        totalCount: r.totalCount,
+      };
+    }),
   });
 }

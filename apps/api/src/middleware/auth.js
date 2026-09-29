@@ -42,7 +42,8 @@ export async function maybeAuth(req, _res, next) {
   next();
 }
 
-export const requireAdmin = requireRole(["admin", "superadmin"]);
+/** admin panel gate — admin, superadmin AND agents (agents are scoped by requirePermission) */
+export const requireStaff = requireRole(["admin", "superadmin", "agent"]);
 export const requireSuperadmin = requireRole(["superadmin"]);
 
 function requireRole(roles) {
@@ -52,5 +53,18 @@ function requireRole(roles) {
       if (!roles.includes(req.user.role)) return next(new ForbiddenError("Admin access required"));
       next();
     });
+  };
+}
+
+/**
+ * Section guard for admin panel routes. superadmin/admin get everything; an
+ * agent must hold the specific section permission (mirrors the reference panel).
+ */
+export function requirePermission(perm) {
+  return (req, _res, next) => {
+    const { role, doc } = req.user || {};
+    if (role === "superadmin" || role === "admin") return next();
+    if (role === "agent" && (doc?.permissions || []).includes(perm)) return next();
+    return next(new ForbiddenError("You do not have access to this section"));
   };
 }

@@ -14,6 +14,7 @@ import Matches from "./pages/Matches.jsx";
 import Ledger from "./pages/Ledger.jsx";
 import Audit from "./pages/Audit.jsx";
 import Settings from "./pages/Settings.jsx";
+import AdminControl from "./pages/AdminControl.jsx";
 
 /** Every authenticated screen renders inside the shell + its own error boundary. */
 function Screen({ admin, children }) {
@@ -56,6 +57,7 @@ function AdminApp() {
       <Route path="/ledger" element={withShell(<Ledger />)} />
       <Route path="/audit" element={withShell(<Audit />)} />
       <Route path="/settings" element={withShell(<Settings />)} />
+      <Route path="/admin-control" element={withShell(<AdminControl />)} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );

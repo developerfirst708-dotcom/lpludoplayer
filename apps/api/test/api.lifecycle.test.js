@@ -5,6 +5,7 @@ process.env.REDIS_URL = "redis://localhost:6379";
 process.env.JWT_ACCESS_SECRET = "test-access-secret-0123456789abcdef0123456789abcdef";
 process.env.JWT_REFRESH_SECRET = "test-refresh-secret-0123456789abcdef0123456789abc";
 process.env.ALLOW_DEV_OTP = "true";
+process.env.ADMIN_PHONE = "9999000000";
 process.env.ADMIN_EMAIL = "admin@lpludo.test";
 process.env.ADMIN_PASSWORD = "Admin@12345";
 process.env.LOCAL_STORAGE_DIR = ".local-storage-test";
@@ -66,7 +67,7 @@ before(async () => {
   const s = await getSettings();
   if (!s.depositUpiId) { s.depositUpiId = "lpludo@upi"; await s.save(); }
 
-  adminToken = (await request(app).post("/api/admin/login").send({ email: "admin@lpludo.test", password: "Admin@12345" })).body.accessToken;
+  adminToken = (await request(app).post("/api/admin/login").send({ phone: "9999000000", password: "Admin@12345" })).body.accessToken;
   assert.ok(adminToken, "admin login failed");
   for (const [key, phone] of [["A", "9999000001"], ["B", "9999000002"], ["C", "9999000003"]]) {
     const r = await loginPlayer(phone);
@@ -265,7 +266,7 @@ test("withdrawal: kyc gate -> hold -> admin pay -> ledger drift 0", async () => 
   assert.equal(denied.status, 403); // kyc required
 
   const kyc = await request(app).post("/api/user/kyc").set("Authorization", `Bearer ${tokens.C}`).send({
-    holderName: "Demo C", upiId: "demo@upi",
+    holderName: "Demo C", dob: "1995-05-10", docType: "aadhar", docNumber: "123456789012",
     frontImageKey: `${cDoc._id}/kyc/front.png`, backImageKey: `${cDoc._id}/kyc/back.png`,
   });
   assert.equal(kyc.status, 200, JSON.stringify(kyc.body));

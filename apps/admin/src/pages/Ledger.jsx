@@ -8,7 +8,7 @@ const LIMIT = 25;
 const TYPES = [
   "", "deposit", "entry_fee_hold", "entry_fee_release", "entry_fee_paid",
   "entry_fee_refund", "prize_win", "withdrawal_hold", "withdrawal_paid",
-  "withdrawal_refund", "referral_bonus", "admin_adjustment",
+  "withdrawal_refund", "referral_commission", "referral_redeem", "adjustment",
 ];
 
 /**

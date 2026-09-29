@@ -19,22 +19,24 @@ if (process.argv[1] && process.argv[1].endsWith("admin.password.js")) {
 const { env } = await import("../config/env.js");
 
 export async function resetAdminPassword() {
-  if (!env.ADMIN_EMAIL || !env.ADMIN_PASSWORD) {
-    throw new Error("ADMIN_EMAIL and ADMIN_PASSWORD must be set in apps/api/.env");
+  if (!env.ADMIN_PASSWORD || (!env.ADMIN_PHONE && !env.ADMIN_EMAIL)) {
+    throw new Error("ADMIN_PHONE (or ADMIN_EMAIL) and ADMIN_PASSWORD must be set in apps/api/.env");
   }
   const { User } = await import("../db/models/user.model.js");
   const { hashPassword } = await import("../services/auth.service.js");
 
-  const user = await User.findOne({ email: env.ADMIN_EMAIL.toLowerCase() }).select("+passwordHash +tokenVersion");
-  if (!user) throw new Error(`no account with email ${env.ADMIN_EMAIL}`);
-  if (!["admin", "superadmin"].includes(user.role)) {
-    throw new Error(`${user.email} is not an admin account`);
+  const user = env.ADMIN_PHONE
+    ? await User.findOne({ phone: env.ADMIN_PHONE }).select("+passwordHash +tokenVersion +phone")
+    : await User.findOne({ email: env.ADMIN_EMAIL.toLowerCase() }).select("+passwordHash +tokenVersion +phone");
+  if (!user) throw new Error(`no admin account for ${env.ADMIN_PHONE || env.ADMIN_EMAIL}`);
+  if (!["admin", "superadmin", "agent"].includes(user.role)) {
+    throw new Error(`${user.phone || user.email} is not an admin account`);
   }
 
   user.passwordHash = await hashPassword(env.ADMIN_PASSWORD);
   user.tokenVersion = (user.tokenVersion || 0) + 1;
   await user.save();
-  return user.email;
+  return user.phone || user.email;
 }
 
 // CLI entry

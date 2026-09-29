@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
 import { useToast } from "../components/Toast.jsx";
@@ -6,15 +7,12 @@ import { Badge, Button, Card, Input, Modal, Money, PageHeading, Pagination, Sele
 import AuthedImage from "../components/AuthedImage.jsx";
 
 const LIMIT = 15;
-const FILTERS = [
-  { value: "", label: "All" },
-  { value: "open", label: "Open" },
-  { value: "running", label: "Running" },
-  { value: "result_submitted", label: "Result in" },
-  { value: "cancel_requested", label: "Disputed" },
-  { value: "approved", label: "Settled" },
-  { value: "cancelled", label: "Cancelled" },
-  { value: "expired", label: "Expired" },
+const TABS = [
+  { value: "running", label: "Running", countKey: "running" },
+  { value: "pending", label: "Pending", countKey: "pending" },
+  { value: "completed", label: "Completed", countKey: "completed" },
+  { value: "cancelled", label: "Cancel", countKey: "cancelled" },
+  { value: "total", label: "Total", countKey: "total" },
 ];
 
 const shortId = (v) => String(v ?? "").slice(-6) || "—";
@@ -27,16 +25,19 @@ const shortId = (v) => String(v ?? "").slice(-6) || "—";
 export default function Matches() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [sp] = useSearchParams();
+  const tab = TABS.some((t) => t.value === sp.get("tab")) ? sp.get("tab") : "running";
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [winner, setWinner] = useState("");
   const [note, setNote] = useState("");
   const [previewKey, setPreviewKey] = useState(null);
 
+  useEffect(() => { setPage(1); }, [tab]);
+
   const contests = useQuery({
-    queryKey: ["contests", page, status],
-    queryFn: () => api(`/admin/contests?page=${page}&limit=${LIMIT}${status ? `&status=${status}` : ""}`),
+    queryKey: ["contests", page, tab],
+    queryFn: () => api(`/admin/contests?page=${page}&limit=${LIMIT}&group=${tab}`),
     keepPreviousData: true,
   });
 
@@ -96,18 +97,21 @@ export default function Matches() {
         subtitle={`${contests.data?.total ?? 0} battles`}
         action={
           <div className="flex max-w-full flex-wrap gap-1 rounded-xl border border-[#f0c2d8] bg-white p-1">
-            {FILTERS.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => { setStatus(f.value); setPage(1); }}
-                className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors ${
-                  status === f.value
-                    ? "bg-gradient-to-br from-[#ec4899] to-[#db2777] text-white"
-                    : "text-[#a56a83] hover:text-[#2a1520]"
-                }`}
-              >
-                {f.label}
-              </button>
+            {TABS.map((t) => (
+              <Link key={t.value} to={`/matches?tab=${t.value}`}>
+                <span
+                  className={`block rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors ${
+                    tab === t.value
+                      ? "bg-gradient-to-br from-[#ec4899] to-[#db2777] text-white"
+                      : "text-[#a56a83] hover:text-[#2a1520]"
+                  }`}
+                >
+                  {t.label}
+                  {contests.data?.counts?.[t.countKey] ? (
+                    <span className="ml-1 opacity-80">({contests.data.counts[t.countKey]})</span>
+                  ) : null}
+                </span>
+              </Link>
             ))}
           </div>
         }

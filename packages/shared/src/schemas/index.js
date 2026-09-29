@@ -65,12 +65,43 @@ export const withdrawRequestSchema = z.object({
   upiId: z.string().trim().regex(/^[\w.-]{2,64}@[a-zA-Z]{2,32}$/, "Enter a valid UPI ID"),
 });
 
-export const kycSubmitSchema = z.object({
-  holderName: z.string().trim().min(2).max(60),
-  upiId: z.string().trim().regex(/^[\w.-]{2,64}@[a-zA-Z]{2,32}$/, "Enter a valid UPI ID"),
-  frontImageKey: z.string().min(1).max(200),
-  backImageKey: z.string().min(1).max(200),
-});
+export const KYC_DOC_TYPES = ["aadhar", "pan"];
+
+/**
+ * KYC submission — full name, date of birth, one Aadhaar/PAN document number
+ * and both sides of the ID card. The number is checked against its document
+ * type (Aadhaar = 12 digits, PAN = ABCDE1234F) and the applicant must be 18+.
+ */
+export const kycSubmitSchema = z
+  .object({
+    holderName: z.string().trim().min(2, "Enter your full name").max(60),
+    dob: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter your date of birth"),
+    docType: z.enum(KYC_DOC_TYPES, { message: "Select Aadhaar or PAN" }),
+    docNumber: z.string().trim().min(4, "Enter the document number").max(20),
+    frontImageKey: z.string().min(1).max(200),
+    backImageKey: z.string().min(1).max(200),
+  })
+  .superRefine((d, ctx) => {
+    const value = d.docNumber.replace(/\s/g, "").toUpperCase();
+    if (d.docType === "aadhar" && !/^\d{12}$/.test(value)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["docNumber"], message: "Aadhaar number must be 12 digits" });
+    }
+    if (d.docType === "pan" && !/^[A-Z]{5}\d{4}[A-Z]$/.test(value)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["docNumber"], message: "Enter a valid PAN (e.g. ABCDE1234F)" });
+    }
+    const birth = new Date(d.dob);
+    if (Number.isNaN(birth.getTime())) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["dob"], message: "Enter a valid date of birth" });
+      return;
+    }
+    const now = new Date();
+    let age = now.getFullYear() - birth.getFullYear();
+    const month = now.getMonth() - birth.getMonth();
+    if (month < 0 || (month === 0 && now.getDate() < birth.getDate())) age -= 1;
+    if (age < 18) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["dob"], message: "You must be 18 or older to verify" });
+    }
+  });
 
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -89,8 +120,9 @@ export const adminReviewSchema = z.object({
   note: z.string().trim().max(300).optional(),
 });
 
+/** Admin panel login — mobile number + password (no email flow). */
 export const adminLoginSchema = z.object({
-  email: z.string().trim().email(),
+  phone: phoneSchema,
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 

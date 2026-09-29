@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { socket } from "../lib/socket.js";
 import { logout } from "../lib/auth.js";
+import { canSee } from "../lib/permissions.js";
 
 /**
- * App shell for the admin panel — 260px white sidebar + rose canvas content,
- * mirroring the reference panel (lpludo/refrence_project/admin). On mobile the
- * sidebar becomes a drawer with a fixed topbar and hamburger button.
+ * App shell — 270px white sidebar + rose canvas, mirroring the reference admin
+ * panel (refrence_project/admin). The nav is grouped with sub-items that carry
+ * their filter in the query string (handled by each page via useSearchParams).
+ * Agents only see the sections they are granted.
  */
 
 const ICONS = {
@@ -20,6 +22,7 @@ const ICONS = {
   ledger: <path d="M4 4h16v16H4V4Zm3 4h10M7 12h10M7 16h6" />,
   audit: <path d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6l7-3ZM9.5 12l1.8 1.8L14.5 10" />,
   settings: <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-2-1.2L14.4 3h-4l-.5 2.5a7.6 7.6 0 0 0-2 1.2l-2.5-1-2 3.5 2.1 1.6a7.4 7.4 0 0 0 0 2.4L3.4 14.8l2 3.5 2.5-1a7.6 7.6 0 0 0 2 1.2l.5 2.5h4l.5-2.5a7.6 7.6 0 0 0 2-1.2l2.5 1 2-3.5-2.1-1.6c.07-.4.1-.8.1-1.2Z" />,
+  admin: <path d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6l7-3Z" />,
 };
 
 function Icon({ name, size = 18 }) {
@@ -40,19 +43,82 @@ function Icon({ name, size = 18 }) {
   );
 }
 
+/**
+ * Sidebar model — one entry per section; `items` are the sub-items each page
+ * reads from its query string. `perm` is the section permission an agent needs;
+ * `superadminOnly` hides a group from everyone but the main admin.
+ */
 const NAV = [
-  { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
-  { to: "/matches", label: "Matches", icon: "matches" },
-  { to: "/users", label: "Users", icon: "users" },
-  { to: "/kyc", label: "KYC", icon: "kyc" },
-  { to: "/deposits", label: "Deposits", icon: "deposit" },
-  { to: "/withdrawals", label: "Withdrawals", icon: "withdraw" },
-  { to: "/ledger", label: "Ledger", icon: "ledger" },
-  { to: "/audit", label: "Audit", icon: "audit" },
-  { to: "/settings", label: "Settings", icon: "settings" },
+  {
+    label: "Dashboard", icon: "dashboard", to: "/dashboard", perm: "dashboard",
+    items: [
+      { label: "All Time", to: "/dashboard?filter=all" },
+      { label: "Today", to: "/dashboard?filter=today" },
+    ],
+  },
+  {
+    label: "Matches", icon: "matches", to: "/matches", perm: "matches",
+    items: [
+      { label: "Running Match", to: "/matches?tab=running" },
+      { label: "Pending Match", to: "/matches?tab=pending" },
+      { label: "Completed Match", to: "/matches?tab=completed" },
+      { label: "Cancel Match", to: "/matches?tab=cancelled" },
+      { label: "Total Match", to: "/matches?tab=total" },
+    ],
+  },
+  {
+    label: "Users", icon: "users", to: "/users", perm: "user",
+    items: [
+      { label: "All Users", to: "/users?filter=all" },
+      { label: "Active", to: "/users?filter=active" },
+      { label: "Blocked", to: "/users?filter=blocked" },
+    ],
+  },
+  {
+    label: "KYC", icon: "kyc", to: "/kyc", perm: "kyc",
+    items: [
+      { label: "All", to: "/kyc?status=all" },
+      { label: "Pending", to: "/kyc?status=pending" },
+      { label: "Approved", to: "/kyc?status=approved" },
+      { label: "Rejected", to: "/kyc?status=rejected" },
+      { label: "Not Submitted", to: "/kyc?status=not_submitted" },
+    ],
+  },
+  { label: "Deposits", icon: "deposit", to: "/deposits", perm: "deposit" },
+  { label: "Withdrawals", icon: "withdraw", to: "/withdrawals", perm: "withdraw" },
+  { label: "Ledger", icon: "ledger", to: "/ledger", perm: "ledger" },
+  { label: "Audit", icon: "audit", to: "/audit", perm: "audit" },
+  {
+    label: "Settings", icon: "settings", to: "/settings", perm: "setting",
+    items: [
+      { label: "Platform", to: "/settings?tab=platform" },
+      { label: "Bonus", to: "/settings?tab=bonus" },
+      { label: "Penalty", to: "/settings?tab=penalty" },
+      { label: "Bonus Report", to: "/settings?tab=bonusReport" },
+      { label: "Penalty Report", to: "/settings?tab=penaltyReport" },
+    ],
+  },
+  {
+    label: "Admin Control", icon: "admin", to: "/admin-control", superadminOnly: true,
+    items: [
+      { label: "Add Admin/Agent", to: "/admin-control?tab=add" },
+      { label: "Admin/Agent Data", to: "/admin-control?tab=data" },
+    ],
+  },
 ];
 
 const PAGE_TITLES = Object.fromEntries(NAV.map((n) => [n.to, n.label]));
+
+/** does `to` (which may carry ?query) match the current location? */
+function matchesQuery(location, to) {
+  const [path, query] = to.split("?");
+  if (location.pathname !== path) return false;
+  if (!query) return true;
+  const current = new URLSearchParams(location.search);
+  const want = new URLSearchParams(query);
+  for (const [k, v] of want.entries()) if (current.get(k) !== v) return false;
+  return true;
+}
 
 export default function Layout({ children, admin }) {
   const [open, setOpen] = useState(false);
@@ -90,12 +156,20 @@ export default function Layout({ children, admin }) {
     navigate("/login");
   };
 
+  const visible = NAV.filter((n) => {
+    if (n.superadminOnly) return admin?.role === "superadmin";
+    if (n.perm) return canSee(admin, n.perm);
+    return true;
+  });
+
+  const close = () => setOpen(false);
+
   return (
     <div className="flex min-h-screen">
       {/* mobile overlay */}
       <div
         className={`fixed inset-0 z-[999] bg-[#3d1f2e]/45 backdrop-blur-[2px] md:hidden ${open ? "block" : "hidden"}`}
-        onClick={() => setOpen(false)}
+        onClick={close}
         aria-hidden="true"
       />
 
@@ -111,7 +185,7 @@ export default function Layout({ children, admin }) {
           <h2 className="text-lg font-extrabold leading-tight text-[#2a1520]">LPLUDO Admin</h2>
           <button
             type="button"
-            onClick={() => setOpen(false)}
+            onClick={close}
             aria-label="Close menu"
             className="ml-auto flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fce4ee] text-[#be185d] md:hidden"
           >
@@ -120,23 +194,46 @@ export default function Layout({ children, admin }) {
         </div>
 
         <nav className="flex flex-1 flex-col gap-1">
-          {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              onClick={() => setOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all active:scale-[0.985] ${
-                  isActive
-                    ? "bg-gradient-to-br from-[#ec4899] to-[#db2777] text-white shadow-[0_8px_18px_rgba(219,39,119,0.25)]"
-                    : "text-[#7a3d58] hover:bg-[#fce4ee] hover:text-[#2a1520]"
-                }`
-              }
-            >
-              <Icon name={item.icon} />
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
+          {visible.map((item) => {
+            const parentActive = location.pathname === item.to;
+            const target = item.items ? item.items[0].to : item.to;
+            return (
+              <div key={item.label}>
+                <Link
+                  to={target}
+                  onClick={close}
+                  className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all active:scale-[0.985] ${
+                    parentActive
+                      ? "bg-gradient-to-br from-[#ec4899] to-[#db2777] text-white shadow-[0_8px_18px_rgba(219,39,119,0.25)]"
+                      : "text-[#7a3d58] hover:bg-[#fce4ee] hover:text-[#2a1520]"
+                  }`}
+                >
+                  <Icon name={item.icon} />
+                  <span>{item.label}</span>
+                </Link>
+
+                {item.items && (
+                  <div className="mt-0.5 flex flex-col gap-0.5 pl-[38px]">
+                    {item.items.map((sub) => {
+                      const active = matchesQuery(location, sub.to);
+                      return (
+                        <Link
+                          key={sub.label}
+                          to={sub.to}
+                          onClick={close}
+                          className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-colors ${
+                            active ? "bg-[#fce4ee] text-[#be185d]" : "text-[#a56a83] hover:bg-[#fdf1f7] hover:text-[#2a1520]"
+                          }`}
+                        >
+                          {sub.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="mt-4 shrink-0 border-t border-[#fbe3ee] pt-4">

@@ -31,8 +31,8 @@ export async function tryResume() {
   emit();
 }
 
-export async function adminLogin(email, password) {
-  const r = await api("/admin/login", { method: "POST", body: { email, password } });
+export async function adminLogin(phone, password) {
+  const r = await api("/admin/login", { method: "POST", body: { phone, password } });
   setAccessToken(r.accessToken);
   setSocketToken(r.accessToken);
   state = { ...state, token: r.accessToken, user: r.admin, ready: true };

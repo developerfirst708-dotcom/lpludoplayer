@@ -1,28 +1,69 @@
 import React, { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
 import { rupeesToPaise, formatPaise } from "@lpludo/shared";
 import { useToast } from "../components/Toast.jsx";
-import { Badge, Button, Card, Input, PageHeading, Panel, Skeleton } from "../components/ui.jsx";
+import { Badge, Button, Card, Input, Money, PageHeading, Panel, Skeleton, Table } from "../components/ui.jsx";
 import { authState } from "../lib/auth.js";
 
 /** paise -> the rupee string an operator types (25000 -> "250.00") */
 const toRupees = (paise) => (Number.isInteger(paise) ? (paise / 100).toFixed(2) : "");
 
+const TABS = [
+  { value: "platform", label: "Platform" },
+  { value: "bonus", label: "Bonus" },
+  { value: "penalty", label: "Penalty" },
+  { value: "bonusReport", label: "Bonus Report" },
+  { value: "penaltyReport", label: "Penalty Report" },
+];
+
 /**
- * Settings — deposit UPI + limits + maintenance mode. Readable by any admin;
- * only a superadmin may save (the API enforces this too).
+ * Settings — platform configuration (deposit UPI, limits, maintenance, support)
+ * plus the bonus / penalty tools and their history reports.
  */
 export default function Settings() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const isSuperadmin = authState().user?.role === "superadmin";
+  const [sp] = useSearchParams();
+  const tab = TABS.some((t) => t.value === sp.get("tab")) ? sp.get("tab") : "platform";
 
-  const settings = useQuery({
-    queryKey: ["settings"],
-    queryFn: () => api("/admin/settings"),
-  });
+  return (
+    <div>
+      <PageHeading title="Settings" subtitle="Platform configuration, bonuses and penalties" />
 
+      <div className="mb-4 flex flex-wrap gap-1 rounded-xl border border-[#f0c2d8] bg-white p-1">
+        {TABS.map((t) => (
+          <Link key={t.value} to={`/settings?tab=${t.value}`}>
+            <span
+              className={`block rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                tab === t.value
+                  ? "bg-gradient-to-br from-[#ec4899] to-[#db2777] text-white"
+                  : "text-[#a56a83] hover:text-[#2a1520]"
+              }`}
+            >
+              {t.label}
+            </span>
+          </Link>
+        ))}
+      </div>
+
+      {tab === "platform" && <PlatformSettings isSuperadmin={isSuperadmin} qc={qc} toast={toast} />}
+      {(tab === "bonus" || tab === "penalty") && (
+        <AdjustForm key={tab} kind={tab === "bonus" ? "bonus" : "penalty"} toast={toast} qc={qc} />
+      )}
+      {(tab === "bonusReport" || tab === "penaltyReport") && (
+        <AdjustReport kind={tab === "bonusReport" ? "bonus" : "penalty"} />
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------ platform ------------------------------ */
+
+function PlatformSettings({ isSuperadmin, qc, toast }) {
+  const settings = useQuery({ queryKey: ["settings"], queryFn: () => api("/admin/settings") });
   const [form, setForm] = useState(null);
 
   useEffect(() => {
@@ -55,7 +96,7 @@ export default function Settings() {
     onSuccess: () => {
       toast.success("Settings saved");
       qc.invalidateQueries({ queryKey: ["settings"] });
-      qc.invalidateQueries({ queryKey: ["summary"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
     onError: (err) => toast.error(err.message),
   });
@@ -77,29 +118,15 @@ export default function Settings() {
 
   return (
     <div>
-      <PageHeading
-        title="Settings"
-        subtitle="Deposit account, limits and platform mode"
-        action={<Badge status={form.maintenanceMode ? "banned" : "active"} />}
-      />
+      <div className="mb-4">
+        <Badge status={form.maintenanceMode ? "banned" : "active"} />
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Deposit account">
           <div className="space-y-3">
-            <Input
-              label="UPI ID"
-              value={form.depositUpiId}
-              onChange={(e) => set({ depositUpiId: e.target.value })}
-              placeholder="lpludo@upi"
-              disabled={!isSuperadmin}
-            />
-            <Input
-              label="Account holder name"
-              value={form.depositUpiName}
-              onChange={(e) => set({ depositUpiName: e.target.value })}
-              placeholder="LPLUDO"
-              disabled={!isSuperadmin}
-            />
+            <Input label="UPI ID" value={form.depositUpiId} onChange={(e) => set({ depositUpiId: e.target.value })} placeholder="lpludo@upi" disabled={!isSuperadmin} />
+            <Input label="Account holder name" value={form.depositUpiName} onChange={(e) => set({ depositUpiName: e.target.value })} placeholder="LPLUDO" disabled={!isSuperadmin} />
             <p className="rounded-xl bg-[#fdf1f7] px-3 py-2 text-[11px] font-semibold text-[#7a3d58]">
               Players see this UPI ID on the deposit screen — double-check it before saving.
             </p>
@@ -108,42 +135,12 @@ export default function Settings() {
 
         <Panel title="Limits & mode">
           <div className="space-y-3">
-            <Input
-              label="Minimum deposit (₹)"
-              value={form.depositMin}
-              onChange={(e) => set({ depositMin: e.target.value })}
-              placeholder="10.00"
-              inputMode="decimal"
-              disabled={!isSuperadmin}
-              hint={settings.data?.depositMinPaise ? `currently ${formatPaise(settings.data.depositMinPaise)}` : undefined}
-            />
-            <Input
-              label="Instant UPI limit (₹)"
-              value={form.gatewayMax}
-              onChange={(e) => set({ gatewayMax: e.target.value })}
-              placeholder="5000.00"
-              inputMode="decimal"
-              disabled={!isSuperadmin}
-              hint="Amounts below this are paid on the IMB Pay gateway and credited automatically. At or above it, players pay to the UPI ID above and you verify the UTR."
-            />
-            <Input
-              label="Minimum withdrawal (₹)"
-              value={form.withdrawalMin}
-              onChange={(e) => set({ withdrawalMin: e.target.value })}
-              placeholder="300.00"
-              inputMode="decimal"
-              disabled={!isSuperadmin}
-              hint={settings.data?.withdrawalMinPaise ? `currently ${formatPaise(settings.data.withdrawalMinPaise)}` : undefined}
-            />
+            <Input label="Minimum deposit (₹)" value={form.depositMin} onChange={(e) => set({ depositMin: e.target.value })} placeholder="10.00" inputMode="decimal" disabled={!isSuperadmin} hint={settings.data?.depositMinPaise ? `currently ${formatPaise(settings.data.depositMinPaise)}` : undefined} />
+            <Input label="Instant UPI limit (₹)" value={form.gatewayMax} onChange={(e) => set({ gatewayMax: e.target.value })} placeholder="5000.00" inputMode="decimal" disabled={!isSuperadmin} hint="Amounts below this are paid on the IMB Pay gateway and credited automatically. At or above it, players pay to the UPI ID above and you verify the UTR." />
+            <Input label="Minimum withdrawal (₹)" value={form.withdrawalMin} onChange={(e) => set({ withdrawalMin: e.target.value })} placeholder="300.00" inputMode="decimal" disabled={!isSuperadmin} hint={settings.data?.withdrawalMinPaise ? `currently ${formatPaise(settings.data.withdrawalMinPaise)}` : undefined} />
             <label className={`flex items-center justify-between rounded-xl border border-[#f0c2d8] px-3 py-2.5 ${isSuperadmin ? "" : "opacity-60"}`}>
               <span className="text-sm font-bold text-[#2a1520]">Maintenance mode</span>
-              <input
-                type="checkbox"
-                checked={form.maintenanceMode}
-                onChange={(e) => set({ maintenanceMode: e.target.checked })}
-                disabled={!isSuperadmin}
-                className="h-4 w-4 accent-[#db2777]"
-              />
+              <input type="checkbox" checked={form.maintenanceMode} onChange={(e) => set({ maintenanceMode: e.target.checked })} disabled={!isSuperadmin} className="h-4 w-4 accent-[#db2777]" />
             </label>
             <p className="text-[11px] text-[#a56a83]">
               Max deposit is currently {formatPaise(settings.data?.depositMaxPaise ?? 0)}.
@@ -154,15 +151,7 @@ export default function Settings() {
 
         <Panel title="Player support">
           <div className="space-y-3">
-            <Input
-              label="Support WhatsApp number"
-              value={form.supportWhatsapp}
-              onChange={(e) => set({ supportWhatsapp: e.target.value.replace(/[^\d+]/g, "") })}
-              placeholder="919876543210"
-              inputMode="tel"
-              disabled={!isSuperadmin}
-              hint="Players tap this number on the Support screen. Include the country code (91…), digits only. Leave empty to hide the chat button."
-            />
+            <Input label="Support WhatsApp number" value={form.supportWhatsapp} onChange={(e) => set({ supportWhatsapp: e.target.value.replace(/[^\d+]/g, "") })} placeholder="919876543210" inputMode="tel" disabled={!isSuperadmin} hint="Players tap this number on the Support screen. Include the country code (91…), digits only." />
             {form.supportWhatsapp.trim() ? (
               <p className="rounded-xl bg-[#fdf1f7] px-3 py-2 text-[11px] font-semibold text-[#7a3d58]">
                 Players will open a WhatsApp chat with +{form.supportWhatsapp.replace(/^\+/, "")}.
@@ -188,5 +177,101 @@ export default function Settings() {
         </p>
       )}
     </div>
+  );
+}
+
+/* --------------------------- bonus / penalty -------------------------- */
+
+function AdjustForm({ kind, toast, qc }) {
+  const isBonus = kind === "bonus";
+  const [phone, setPhone] = useState("");
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+
+  const submit = useMutation({
+    mutationFn: () => {
+      const amountPaise = rupeesToPaise(amount);
+      if (!amountPaise || amountPaise <= 0) throw new Error("Enter a valid amount");
+      return api(`/admin/${kind}`, { method: "POST", body: { phone, amountPaise, note: reason.trim() || undefined } });
+    },
+    onSuccess: () => {
+      toast.success(isBonus ? "Bonus added" : "Penalty applied");
+      setPhone(""); setAmount(""); setReason("");
+      qc.invalidateQueries({ queryKey: ["settings-report"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const valid = /^[6-9]\d{9}$/.test(phone) && Number(amount) > 0;
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Panel title={isBonus ? "Add bonus" : "Add penalty"}>
+        <div className="space-y-3">
+          <Input label="Mobile number" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} placeholder="10-digit mobile" inputMode="numeric" maxLength={10} />
+          <Input label="Amount (₹)" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={isBonus ? "50" : "100"} inputMode="decimal" />
+          <Input label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder={isBonus ? "Welcome bonus" : "Policy violation"} />
+          <Button
+            variant={isBonus ? "success" : "danger"}
+            className="w-full py-2.5 text-sm"
+            disabled={!valid || submit.isPending}
+            onClick={() => submit.mutate()}
+          >
+            {submit.isPending ? "Working…" : isBonus ? "Add bonus" : "Apply penalty"}
+          </Button>
+          <p className="text-[11px] text-[#a56a83]">
+            {isBonus
+              ? "The amount is credited to the player's wallet right away."
+              : "The amount is deducted from the player's wallet — it fails if the balance is too low."}
+          </p>
+        </div>
+      </Panel>
+
+      <Panel title="How it works">
+        <ul className="list-disc space-y-1.5 pl-4 text-xs font-semibold text-[#7a3d58]">
+          <li>Every bonus and penalty is written to the wallet ledger, so the balance can never drift.</li>
+          <li>{isBonus ? "Bonuses" : "Penalties"} show up on the Dashboard {isBonus ? "Total Bonus" : "Total Penalty"} card and in the {isBonus ? "Bonus" : "Penalty"} Report.</li>
+          <li>Use the mobile number of the player's account.</li>
+        </ul>
+      </Panel>
+    </div>
+  );
+}
+
+function AdjustReport({ kind }) {
+  const report = useQuery({
+    queryKey: ["settings-report"],
+    queryFn: () => api("/admin/settings-report"),
+  });
+
+  const rows = report.data?.[kind] || [];
+
+  return (
+    <Card>
+      {report.isLoading ? (
+        <Skeleton className="h-64 w-full" />
+      ) : report.isError ? (
+        <p className="py-6 text-center text-sm font-bold text-rose-600">{report.error?.message}</p>
+      ) : (
+        <Table
+          columns={[
+            { key: "name", label: "User", render: (r) => (
+              <div>
+                <p className="font-bold text-[#2a1520]">{r.name}</p>
+                <p className="text-[11px] text-[#a56a83]">{r.phone || "—"}</p>
+              </div>
+            ) },
+            { key: "amountPaise", label: "Amount", render: (r) => <Money paise={r.amountPaise} /> },
+            { key: "reason", label: "Reason", render: (r) => <span className="text-xs text-[#7a3d58]">{r.reason || "—"}</span> },
+            { key: "balanceAfterPaise", label: "Balance after", render: (r) => <Money paise={r.balanceAfterPaise ?? 0} /> },
+            { key: "adminName", label: "Admin" },
+            { key: "createdAt", label: "Date", render: (r) => (r.createdAt ? new Date(r.createdAt).toLocaleString("en-IN") : "—") },
+          ]}
+          data={rows}
+          empty={`No ${kind} history yet`}
+        />
+      )}
+    </Card>
   );
 }

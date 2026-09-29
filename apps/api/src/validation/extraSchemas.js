@@ -1,5 +1,34 @@
 import { z } from "zod";
-import { objectIdSchema } from "@lpludo/shared/schemas";
+import { objectIdSchema, phoneSchema } from "@lpludo/shared/schemas";
+
+/** admin / agent account management (superadmin only) */
+export const adminAccountCreateSchema = z.object({
+  name: z.string().trim().min(2, "Name is required").max(40),
+  phone: phoneSchema,
+  email: z.string().trim().email("Enter a valid email").optional().or(z.literal("")),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  role: z.enum(["admin", "agent"]),
+  permissions: z.array(z.string()).default([]),
+});
+
+export const adminAccountUpdateSchema = z.object({
+  name: z.string().trim().min(2).max(40).optional(),
+  phone: phoneSchema.optional(),
+  email: z.string().trim().email("Enter a valid email").optional().or(z.literal("")),
+  password: z.string().min(8, "Password must be at least 8 characters").optional(),
+  role: z.enum(["admin", "agent"]).optional(),
+  permissions: z.array(z.string()).optional(),
+});
+
+/** admin wallet adjustment — bonus (credit) / penalty (debit) */
+export const adminAdjustmentSchema = z
+  .object({
+    userId: objectIdSchema.optional(),
+    phone: phoneSchema.optional(),
+    amountPaise: z.number({ invalid_type_error: "Amount is required" }).int().positive("Amount must be greater than 0"),
+    note: z.string().trim().max(200).optional(),
+  })
+  .refine((d) => d.userId || d.phone, { message: "Enter a user id or a mobile number" });
 
 export const depositClaimSchema = z.object({
   amountPaise: z.number({ invalid_type_error: "Amount is required" }).int().min(1000, "Minimum deposit is ₹10"),

@@ -19,6 +19,9 @@ const userSchema = new mongoose.Schema(
     status: { type: String, enum: ["active", "banned"], default: "active", index: true },
     banReason: { type: String },
 
+    /** section permissions for `agent` accounts (admin/superadmin ignore this) */
+    permissions: { type: [String], default: [] },
+
     /** hashed with bcrypt(12) — never logged */
     passwordHash: { type: String, select: false }, // admin/agent login only
     email: { type: String, trim: true, lowercase: true, sparse: true },
@@ -36,6 +39,10 @@ const userSchema = new mongoose.Schema(
     kyc: {
       status: { type: String, enum: ["not_submitted", "pending", "verified", "rejected"], default: "not_submitted", index: true },
       holderName: { type: String },
+      dob: { type: String },
+      docType: { type: String },
+      docNumber: { type: String },
+      /** legacy: KYC used to collect a payout UPI — kept so old rows still read */
       upiId: { type: String },
       docFrontKey: { type: String },
       docBackKey: { type: String },

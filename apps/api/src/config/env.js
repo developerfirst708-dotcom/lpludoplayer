@@ -44,7 +44,9 @@ const envSchema = z
     // auto-refund SLA (hours) for untouched conflicts
     CONFLICT_REFUND_HOURS: z.coerce.number().int().min(1).max(72).default(12),
 
-    // admin bootstrap (seed script only; no hardcoded credentials in code)
+    // admin bootstrap (seed script only; no hardcoded credentials in code).
+    // Admins log in with MOBILE + password, so ADMIN_PHONE is the login id.
+    ADMIN_PHONE: z.string().trim().regex(/^[6-9]\d{9}$/, "ADMIN_PHONE must be a 10-digit Indian mobile").optional(),
     ADMIN_EMAIL: z.string().email().optional(),
     ADMIN_PASSWORD: z.string().min(8).optional(),
     ADMIN_NAME: z.string().default("Main Admin"),

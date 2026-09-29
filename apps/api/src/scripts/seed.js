@@ -21,26 +21,32 @@ const { hashPassword } = await import("../services/auth.service.js");
 const l = log("seed");
 
 export async function seed() {
-  if (!env.ADMIN_EMAIL || !env.ADMIN_PASSWORD) {
-    throw new Error("ADMIN_EMAIL and ADMIN_PASSWORD must be set in apps/api/.env to seed an admin");
+  if (!env.ADMIN_PHONE || !env.ADMIN_PASSWORD) {
+    throw new Error("ADMIN_PHONE and ADMIN_PASSWORD must be set in apps/api/.env to seed an admin");
   }
 
-  // ---- admin ----
-  let admin = await User.findOne({ email: env.ADMIN_EMAIL.toLowerCase() });
+  // ---- admin (logs in with MOBILE + password) ----
+  let admin = await User.findOne({ phone: env.ADMIN_PHONE }).select("+phone");
+  if (!admin && env.ADMIN_EMAIL) {
+    admin = await User.findOne({ email: env.ADMIN_EMAIL.toLowerCase() }).select("+phone");
+  }
   if (!admin) {
     admin = new User({
       name: env.ADMIN_NAME || "Main Admin",
-      email: env.ADMIN_EMAIL.toLowerCase(),
+      phone: env.ADMIN_PHONE,
+      email: env.ADMIN_EMAIL ? env.ADMIN_EMAIL.toLowerCase() : undefined,
       role: "superadmin",
       passwordHash: await hashPassword(env.ADMIN_PASSWORD),
     });
     await admin.save();
-    l.info({ email: admin.email }, "admin created");
+    l.info({ phone: admin.phone }, "admin created");
   } else {
     admin.role = "superadmin";
+    admin.phone = env.ADMIN_PHONE; // make sure the login number is set
+    if (env.ADMIN_EMAIL) admin.email = env.ADMIN_EMAIL.toLowerCase();
     if (!admin.passwordHash) admin.passwordHash = await hashPassword(env.ADMIN_PASSWORD);
     await admin.save();
-    l.info({ email: admin.email }, "admin already present — updated");
+    l.info({ phone: admin.phone }, "admin already present — updated");
   }
 
   // ---- settings (the deposit VPA admins can change later) ----
@@ -87,7 +93,7 @@ export async function seed() {
     }
   }
 
-  return { admin: admin.email };
+  return { admin: admin.phone };
 }
 
 // CLI entry

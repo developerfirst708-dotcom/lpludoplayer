@@ -81,7 +81,9 @@ export async function submitKyc(req, res) {
   user.kyc = {
     status: "pending",
     holderName: data.holderName,
-    upiId: data.upiId,
+    dob: data.dob,
+    docType: data.docType,
+    docNumber: data.docNumber.replace(/\s/g, "").toUpperCase(),
     docFrontKey: data.frontImageKey,
     docBackKey: data.backImageKey,
   };

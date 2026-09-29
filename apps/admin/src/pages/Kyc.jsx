@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
 import { useToast } from "../components/Toast.jsx";
@@ -7,24 +8,28 @@ import AuthedImage from "../components/AuthedImage.jsx";
 
 const LIMIT = 15;
 const FILTERS = [
-  { value: "", label: "All" },
+  { value: "all", label: "All" },
   { value: "pending", label: "Pending" },
-  { value: "verified", label: "Verified" },
+  { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
+  { value: "not_submitted", label: "Not Submitted" },
 ];
 
-/** KYC — review submitted documents, approve or reject with a note. */
+/** KYC — review submitted documents, filter by status, approve or reject. */
 export default function Kyc() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [sp] = useSearchParams();
+  const status = FILTERS.some((f) => f.value === sp.get("status")) ? sp.get("status") : "all";
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState("pending");
   const [review, setReview] = useState(null); // { row, action }
   const [note, setNote] = useState("");
 
+  useEffect(() => { setPage(1); }, [status]);
+
   const kyc = useQuery({
     queryKey: ["kyc", page, status],
-    queryFn: () => api(`/admin/kyc?page=${page}&limit=${LIMIT}${status ? `&status=${status}` : ""}`),
+    queryFn: () => api(`/admin/kyc?page=${page}&limit=${LIMIT}&status=${status}`),
     keepPreviousData: true,
   });
 
@@ -49,19 +54,19 @@ export default function Kyc() {
         title="KYC verification"
         subtitle={`${kyc.data?.total ?? 0} submissions`}
         action={
-          <div className="flex gap-1 rounded-xl border border-[#f0c2d8] bg-white p-1">
+          <div className="flex flex-wrap gap-1 rounded-xl border border-[#f0c2d8] bg-white p-1">
             {FILTERS.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => { setStatus(f.value); setPage(1); }}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
-                  status === f.value
-                    ? "bg-gradient-to-br from-[#ec4899] to-[#db2777] text-white"
-                    : "text-[#a56a83] hover:text-[#2a1520]"
-                }`}
-              >
-                {f.label}
-              </button>
+              <Link key={f.value} to={`/kyc?status=${f.value}`}>
+                <span
+                  className={`block rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                    status === f.value
+                      ? "bg-gradient-to-br from-[#ec4899] to-[#db2777] text-white"
+                      : "text-[#a56a83] hover:text-[#2a1520]"
+                  }`}
+                >
+                  {f.label}
+                </span>
+              </Link>
             ))}
           </div>
         }
@@ -83,7 +88,15 @@ export default function Kyc() {
                   </div>
                 ) },
                 { key: "holderName", label: "Holder", render: (r) => r.kyc?.holderName || "—" },
-                { key: "upiId", label: "Payout UPI", render: (r) => <span className="font-mono text-xs">{r.kyc?.upiId || "—"}</span> },
+                {
+                  key: "doc",
+                  label: "Document",
+                  render: (r) => (
+                    <span className="text-xs">
+                      {r.kyc?.docType ? `${r.kyc.docType.toUpperCase()} · ${r.kyc.docNumber || ""}` : "—"}
+                    </span>
+                  ),
+                },
                 {
                   key: "docs",
                   label: "Documents",
@@ -141,7 +154,11 @@ export default function Kyc() {
         }
       >
         <p className="mb-3 text-sm text-[#7a3d58]">
-          {review?.row?.name} · {review?.row?.phone} · UPI {review?.row?.kyc?.upiId}
+          {review?.row?.name} · {review?.row?.phone}
+          {review?.row?.kyc?.docType
+            ? ` · ${review?.row?.kyc?.holderName || ""} · ${review?.row?.kyc?.docType.toUpperCase()} ${review?.row?.kyc?.docNumber || ""}`
+            : ""}
+          {review?.row?.kyc?.dob ? ` · DOB ${review?.row?.kyc?.dob}` : ""}
         </p>
         <div className="mb-3 flex flex-wrap gap-3">
           <div>

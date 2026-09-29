@@ -195,6 +195,26 @@ export async function creditReferralCommission({ referrerId, referredUserId, con
 }
 
 /**
+ * Admin wallet adjustment — a bonus (positive amount) or penalty (negative
+ * amount). Recorded as an `adjustment` ledger row tagged with
+ * `metadata.kind = "bonus" | "penalty"` so the dashboard and the bonus/penalty
+ * reports can tell the two apart. A penalty that would overdraw is rejected by
+ * applyLedger, which is exactly what we want.
+ */
+export async function adminAdjustment({ userId, amountPaise, kind, note, actorId }) {
+  return lockedFor(userId, async (session) => {
+    const { wallet } = await applyLedger({
+      session, userId, amount: amountPaise, type: "adjustment",
+      refType: "admin", refId: userId,
+      note: note || (kind === "bonus" ? "Admin bonus" : "Admin penalty"),
+      metadata: { kind },
+      idempotencyKey: `adjust:${userId}:${randomUUID()}`, actorId,
+    });
+    return viewOf(wallet);
+  });
+}
+
+/**
  * Redeem referral balance into the playable/withdrawable balance.
  * One ledger row carries both deltas so the two buckets can never drift apart.
  */

@@ -4,7 +4,7 @@ import { adminLogin, authState } from "../lib/auth.js";
 import { Button, Card, Input } from "../components/ui.jsx";
 
 export default function AdminLogin() {
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -17,7 +17,7 @@ export default function AdminLogin() {
     setBusy(true);
     setError("");
     try {
-      await adminLogin(email, password);
+      await adminLogin(phone.replace(/\D/g, ""), password);
       navigate("/dashboard");
     } catch (err) {
       setError(err.message || "Login failed");
@@ -40,11 +40,13 @@ export default function AdminLogin() {
         <form onSubmit={doLogin} className="flex flex-col gap-3">
           {error && <p className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600">{error}</p>}
           <Input
-            label="Admin email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="admin@lpludo.local"
+            label="Mobile number"
+            type="tel"
+            inputMode="numeric"
+            maxLength={10}
+            value={phone}
+            onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
+            placeholder="10-digit mobile number"
           />
           <Input
             label="Password"
@@ -53,14 +55,14 @@ export default function AdminLogin() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
           />
-          <Button type="submit" disabled={busy || !email || !password} className="mt-1 w-full py-2.5 text-sm">
+          <Button type="submit" disabled={busy || phone.length !== 10 || !password} className="mt-1 w-full py-2.5 text-sm">
             {busy ? "Signing in…" : "Sign in"}
           </Button>
         </form>
       </Card>
 
       <p className="text-center text-[11px] font-semibold text-[#a56a83]">
-        Demo: admin@lpludo.local / Admin@12345
+        Admins and agents sign in with their mobile number and password.
       </p>
     </div>
   );

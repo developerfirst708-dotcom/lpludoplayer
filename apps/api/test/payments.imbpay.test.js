@@ -5,6 +5,7 @@ process.env.REDIS_URL = "redis://localhost:6379";
 process.env.JWT_ACCESS_SECRET = "test-access-secret-0123456789abcdef0123456789abcdef";
 process.env.JWT_REFRESH_SECRET = "test-refresh-secret-0123456789abcdef0123456789abc";
 process.env.ALLOW_DEV_OTP = "true";
+process.env.ADMIN_PHONE = "9999000000";
 process.env.ADMIN_EMAIL = "admin@lpludo.test";
 process.env.ADMIN_PASSWORD = "Admin@12345";
 process.env.LOCAL_STORAGE_DIR = ".local-storage-test-imb";
@@ -180,7 +181,7 @@ before(async () => {
   await seed();
 
   const res = await request(app).post("/api/admin/login")
-    .send({ email: "admin@lpludo.test", password: "Admin@12345" });
+    .send({ phone: "9999000000", password: "Admin@12345" });
   assert.equal(res.status, 200, JSON.stringify(res.body));
   adminToken = res.body.accessToken;
 });

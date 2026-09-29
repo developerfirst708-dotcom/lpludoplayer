@@ -61,11 +61,13 @@ export async function refresh(req, res) {
   if (payload.tv !== user.tokenVersion) throw new UnauthorizedError("Session revoked, please log in again");
 
   issueTokens(res, user);
-  const isAdmin = user.role === "admin" || user.role === "superadmin";
+  const isAdmin = ["admin", "superadmin", "agent"].includes(user.role);
   res.json({
     accessToken: signAccessToken(user),
     user: { ...user.toPublic(), phone: user.phone },
-    ...(isAdmin ? { admin: { id: user._id, name: user.name, email: user.email, role: user.role } } : {}),
+    ...(isAdmin
+      ? { admin: { id: user._id, name: user.name, phone: user.phone || null, email: user.email || null, role: user.role, permissions: user.permissions || [] } }
+      : {}),
   });
 }
 
