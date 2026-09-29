@@ -266,7 +266,7 @@ export function StatCard({ label, value, tone = "pink", hint, icon }) {
     teal: "bg-[rgba(13,148,136,0.12)] text-teal-600",
   };
   return (
-    <Card className="flex items-start gap-3">
+    <Card className="flex items-center gap-3">
       <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-base font-black ${tones[tone]}`}>
         {icon || "•"}
       </span>

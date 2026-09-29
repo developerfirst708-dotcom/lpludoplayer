@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, apiUpload } from "../lib/api.js";
+import compressImage from "../lib/compressImage.js";
 import { socket } from "../lib/socket.js";
 import { useToast } from "../components/Toast.jsx";
 import { Badge, Button, Empty, Input, Panel, Skeleton } from "../components/ui.jsx";
@@ -45,9 +46,6 @@ export default function Kyc() {
   const [uploading, setUploading] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const frontRef = useRef(null);
-  const backRef = useRef(null);
-
   const profile = useQuery({ queryKey: ["profile"], queryFn: () => api("/user/profile") });
 
   // admin verdicts land without a reload
@@ -84,7 +82,9 @@ export default function Kyc() {
     if (!file) return;
     setUploading(kind);
     try {
-      const { key } = await apiUpload("/uploads", file, "kyc");
+      // phone cameras produce multi-MB photos — shrink + re-encode to JPEG first
+      const prepared = await compressImage(file, { maxWidth: 1600, maxHeight: 1600, quality: 0.8, maxSizeKB: 1500 });
+      const { key } = await apiUpload("/uploads", prepared, "kyc");
       if (kind === "front") {
         setFrontKey(key);
         setFrontName(file.name);
@@ -212,13 +212,10 @@ export default function Kyc() {
                 hint={docNumber && !docValid ? (docType === "aadhar" ? "Aadhaar must be 12 digits" : "Enter a valid PAN (e.g. ABCDE1234F)") : undefined}
               />
 
-              <input ref={frontRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => upload("front", e.target.files?.[0])} />
-              <input ref={backRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => upload("back", e.target.files?.[0])} />
-
               {[
-                ["front", "Photo (front)", frontName, frontRef, frontKey, uploading === "front"],
-                ["back", "Photo (back)", backName, backRef, backKey, uploading === "back"],
-              ].map(([kind, label, fileLabel, ref, key, isBusy]) => (
+                ["front", "Photo (front)", frontName, frontKey, uploading === "front"],
+                ["back", "Photo (back)", backName, backKey, uploading === "back"],
+              ].map(([kind, label, fileLabel, key, isBusy]) => (
                 <div key={kind} className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
                   <div className="min-w-0">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
@@ -226,14 +223,25 @@ export default function Kyc() {
                       {isBusy ? "Uploading…" : fileLabel || "No file chosen"}
                     </p>
                   </div>
-                  <Button
-                    variant="ghost"
-                    className="shrink-0 px-4 py-2 text-xs"
-                    loading={isBusy}
-                    onClick={() => ref.current?.click()}
+                  {/* a label wrapping the input opens the native picker on every mobile browser */}
+                  <label
+                    className={`inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-gray-100 px-4 py-2 text-xs font-extrabold text-slate-700 transition-all hover:bg-gray-200 active:scale-95 ${
+                      isBusy ? "pointer-events-none opacity-50" : ""
+                    }`}
                   >
                     {key ? "Replace" : "Upload"}
-                  </Button>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      disabled={isBusy}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        upload(kind, file);
+                      }}
+                    />
+                  </label>
                 </div>
               ))}
 

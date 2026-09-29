@@ -122,6 +122,7 @@ function matchesQuery(location, to) {
 
 export default function Layout({ children, admin }) {
   const [open, setOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState(new Set());
   const location = useLocation();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -150,6 +151,21 @@ export default function Layout({ children, admin }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
+
+  // keep the section that owns the current route expanded
+  useEffect(() => {
+    const active = NAV.find((n) => n.items && location.pathname === n.to);
+    if (!active) return;
+    setOpenGroups((prev) => (prev.has(active.label) ? prev : new Set(prev).add(active.label)));
+  }, [location.pathname]);
+
+  const toggleGroup = (label) =>
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
 
   const handleLogout = async () => {
     await logout();
@@ -196,23 +212,50 @@ export default function Layout({ children, admin }) {
         <nav className="flex flex-1 flex-col gap-1">
           {visible.map((item) => {
             const parentActive = location.pathname === item.to;
-            const target = item.items ? item.items[0].to : item.to;
-            return (
-              <div key={item.label}>
-                <Link
-                  to={target}
-                  onClick={close}
-                  className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all active:scale-[0.985] ${
-                    parentActive
-                      ? "bg-gradient-to-br from-[#ec4899] to-[#db2777] text-white shadow-[0_8px_18px_rgba(219,39,119,0.25)]"
-                      : "text-[#7a3d58] hover:bg-[#fce4ee] hover:text-[#2a1520]"
-                  }`}
-                >
+            const itemCls = (active) =>
+              `flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-left transition-all active:scale-[0.985] ${
+                active
+                  ? "bg-gradient-to-br from-[#ec4899] to-[#db2777] text-white shadow-[0_8px_18px_rgba(219,39,119,0.25)]"
+                  : "text-[#7a3d58] hover:bg-[#fce4ee] hover:text-[#2a1520]"
+              }`;
+
+            // a section with no children is a plain link
+            if (!item.items) {
+              return (
+                <Link key={item.label} to={item.to} onClick={close} className={itemCls(parentActive)}>
                   <Icon name={item.icon} />
                   <span>{item.label}</span>
                 </Link>
+              );
+            }
 
-                {item.items && (
+            // a section with children is a dropdown toggle
+            const isOpen = openGroups.has(item.label);
+            return (
+              <div key={item.label}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(item.label)}
+                  aria-expanded={isOpen}
+                  className={itemCls(parentActive)}
+                >
+                  <Icon name={item.icon} />
+                  <span>{item.label}</span>
+                  <svg
+                    className={`ml-auto h-4 w-4 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 6l6 6-6 6" />
+                  </svg>
+                </button>
+
+                {isOpen && (
                   <div className="mt-0.5 flex flex-col gap-0.5 pl-[38px]">
                     {item.items.map((sub) => {
                       const active = matchesQuery(location, sub.to);

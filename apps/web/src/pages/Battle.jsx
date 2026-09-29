@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, apiUpload } from "../lib/api.js";
@@ -27,7 +27,6 @@ export default function Battle() {
   const [outcome, setOutcome] = useState("");
   const [screenshot, setScreenshot] = useState(null);
   const [screenshotName, setScreenshotName] = useState("");
-  const screenshotRef = useRef(null);
 
   /* -------------------------------------------------------------------------- */
   /*                              API QUERIES                                   */
@@ -401,19 +400,27 @@ export default function Battle() {
               </div>
 
               {(outcome === "won" || outcome === "lost") && (
-                <div>
-                  <input ref={screenshotRef} type="file" accept="image/*" className="hidden" onChange={(e) => pickScreenshot(e.target.files?.[0])} />
-                  <div className="flex items-center justify-between rounded-xl border p-3 bg-gray-50">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-bold uppercase text-slate-400">
-                        {outcome === "won" ? "Winning Screenshot (Required)" : "Screenshot (Optional)"}
-                      </p>
-                      <p className="truncate text-xs font-bold text-slate-700">{screenshotName || "No file chosen"}</p>
-                    </div>
-                    <Button variant="ghost" type="button" onClick={() => screenshotRef.current?.click()}>
-                      {screenshot ? "Replace" : "Upload"}
-                    </Button>
+                <div className="flex items-center justify-between rounded-xl border border-gray-200 p-3 bg-gray-50">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase text-slate-400">
+                      {outcome === "won" ? "Winning Screenshot (Required)" : "Screenshot (Optional)"}
+                    </p>
+                    <p className="truncate text-xs font-bold text-slate-700">{screenshotName || "No file chosen"}</p>
                   </div>
+                  {/* a label wrapping the input opens the native picker on every mobile browser */}
+                  <label className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-gray-100 px-4 py-2 text-xs font-extrabold text-slate-700 transition-all hover:bg-gray-200 active:scale-95">
+                    {screenshot ? "Replace" : "Upload"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        pickScreenshot(file);
+                      }}
+                    />
+                  </label>
                 </div>
               )}
 

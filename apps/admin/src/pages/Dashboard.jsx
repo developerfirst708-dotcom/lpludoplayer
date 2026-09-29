@@ -30,8 +30,8 @@ export default function Dashboard() {
     return (
       <div className="space-y-4">
         <Skeleton className="h-9 w-56" />
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-20" />)}
         </div>
         <Skeleton className="h-64 w-full" />
       </div>
@@ -84,7 +84,7 @@ export default function Dashboard() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((c) => (
           <StatCard
             key={c.label}
