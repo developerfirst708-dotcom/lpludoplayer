@@ -5,11 +5,13 @@ import { api } from "../lib/api.js";
 import { useToast } from "../components/Toast.jsx";
 import { Badge, Button, Card, Input, Modal, Money, PageHeading, Pagination, Select, Skeleton, Table } from "../components/ui.jsx";
 import AuthedImage from "../components/AuthedImage.jsx";
+import { authState } from "../lib/auth.js";
+import { canSee } from "../lib/permissions.js";
 
 const LIMIT = 15;
 const TABS = [
   { value: "running", label: "Running", countKey: "running" },
-  { value: "pending", label: "Pending", countKey: "pending" },
+  { value: "pending", label: "Pending", countKey: "pending", perm: "pending_matches" },
   { value: "completed", label: "Completed", countKey: "completed" },
   { value: "cancelled", label: "Cancel", countKey: "cancelled" },
   { value: "total", label: "Total", countKey: "total" },
@@ -26,6 +28,7 @@ export default function Matches() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [sp] = useSearchParams();
+  const tabs = TABS.filter((t) => !t.perm || canSee(authState().user, t.perm));
   const tab = TABS.some((t) => t.value === sp.get("tab")) ? sp.get("tab") : "running";
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState(null);
@@ -97,7 +100,7 @@ export default function Matches() {
         subtitle={`${contests.data?.total ?? 0} battles`}
         action={
           <div className="flex max-w-full flex-wrap gap-1 rounded-xl border border-[#f0c2d8] bg-white p-1">
-            {TABS.map((t) => (
+            {tabs.map((t) => (
               <Link key={t.value} to={`/matches?tab=${t.value}`}>
                 <span
                   className={`block rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors ${

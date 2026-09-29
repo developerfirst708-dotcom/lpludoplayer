@@ -60,7 +60,7 @@ const NAV = [
     label: "Matches", icon: "matches", to: "/matches", perm: "matches",
     items: [
       { label: "Running Match", to: "/matches?tab=running" },
-      { label: "Pending Match", to: "/matches?tab=pending" },
+      { label: "Pending Match", to: "/matches?tab=pending", perm: "pending_matches" },
       { label: "Completed Match", to: "/matches?tab=completed" },
       { label: "Cancel Match", to: "/matches?tab=cancelled" },
       { label: "Total Match", to: "/matches?tab=total" },
@@ -257,7 +257,7 @@ export default function Layout({ children, admin }) {
 
                 {isOpen && (
                   <div className="mt-0.5 flex flex-col gap-0.5 pl-[38px]">
-                    {item.items.map((sub) => {
+                    {item.items.filter((sub) => !sub.perm || canSee(admin, sub.perm)).map((sub) => {
                       const active = matchesQuery(location, sub.to);
                       return (
                         <Link

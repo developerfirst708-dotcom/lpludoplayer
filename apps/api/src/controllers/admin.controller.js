@@ -19,7 +19,7 @@ import { checkPassword, hashPassword } from "../services/auth.service.js";
 import { issueTokens } from "../controllers/auth.controller.js";
 import { writeAudit } from "../services/audit.service.js";
 import { emitToUser, emitAdminRefresh, emitContestUpdate, emitWalletUpdate } from "../realtime/io.js";
-import { UnauthorizedError, BadRequestError, NotFoundError, ConflictError } from "@lpludo/shared";
+import { UnauthorizedError, BadRequestError, NotFoundError, ConflictError, ForbiddenError } from "@lpludo/shared";
 import { paginationSchema } from "@lpludo/shared/schemas";
 import { log } from "../config/logger.js";
 
@@ -453,6 +453,10 @@ export async function listContests(req, res) {
   const { page, limit } = validate(paginationSchema, req.query);
   const filter = {};
   const group = String(req.query.group || "");
+  // pending matches are a separate grant for agents (on top of the matches section)
+  if (group === "pending" && req.user.role === "agent" && !(req.user.doc?.permissions || []).includes("pending_matches")) {
+    throw new ForbiddenError("You do not have access to pending matches");
+  }
   if (CONTEST_GROUPS[group]) filter.status = { $in: CONTEST_GROUPS[group] };
   else if (req.query.status) filter.status = req.query.status;
 

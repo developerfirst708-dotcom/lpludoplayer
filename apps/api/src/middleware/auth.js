@@ -56,6 +56,30 @@ function requireRole(roles) {
   };
 }
 
+const PHONE_KEYS = new Set(["phone", "mobile", "mobileNumber", "adminPhone", "userPhone"]);
+
+/** deep-copy a JSON body, blanking every phone-ish field */
+function maskPhones(value) {
+  if (Array.isArray(value)) return value.map(maskPhones);
+  if (value && typeof value === "object" && (value.constructor === Object || value.constructor === undefined)) {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) out[k] = PHONE_KEYS.has(k) ? null : maskPhones(v);
+    return out;
+  }
+  return value;
+}
+
+/**
+ * An agent without the "mobile" permission never receives a phone number — the
+ * JSON body is masked on its way out (the reference panel's phone-visibility rule).
+ */
+export function hidePhonesFromAgents(req, res, next) {
+  if (req.user?.role !== "agent" || (req.user.doc?.permissions || []).includes("mobile")) return next();
+  const json = res.json.bind(res);
+  res.json = (body) => json(maskPhones(body));
+  next();
+}
+
 /**
  * Section guard for admin panel routes. superadmin/admin get everything; an
  * agent must hold the specific section permission (mirrors the reference panel).

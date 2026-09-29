@@ -5,6 +5,8 @@
 export const PERMISSIONS = [
   { key: "dashboard", label: "Dashboard" },
   { key: "matches", label: "Matches" },
+  { key: "pending_matches", label: "Pending Matches" },
+  { key: "mobile", label: "Mobile No." },
   { key: "user", label: "Users" },
   { key: "kyc", label: "KYC" },
   { key: "deposit", label: "Deposits" },

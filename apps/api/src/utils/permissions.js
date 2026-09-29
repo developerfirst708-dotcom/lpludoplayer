@@ -9,6 +9,8 @@
 export const ALL_PERMISSIONS = [
   "dashboard",
   "matches",
+  "pending_matches",
+  "mobile",
   "user",
   "kyc",
   "deposit",

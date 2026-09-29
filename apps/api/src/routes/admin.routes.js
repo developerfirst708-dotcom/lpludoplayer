@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { asyncH } from "../middleware/errors.js";
-import { requireStaff, requireSuperadmin, requirePermission } from "../middleware/auth.js";
+import { requireStaff, requireSuperadmin, requirePermission, hidePhonesFromAgents } from "../middleware/auth.js";
 import { apiLimiter, adminLoginLimiter } from "../middleware/rateLimit.js";
 import * as adminController from "../controllers/admin.controller.js";
 
@@ -12,7 +12,7 @@ router.post("/login", adminLoginLimiter, asyncH(adminController.login));
 // ---- everything below requires an admin-ish token ----
 // An `agent` additionally needs the matching section permission; `admin` and
 // `superadmin` pass every requirePermission guard.
-router.use(requireStaff, apiLimiter);
+router.use(requireStaff, hidePhonesFromAgents, apiLimiter);
 
 router.get("/me", asyncH(adminController.me));
 router.get("/dashboard", requirePermission("dashboard"), asyncH(adminController.dashboardStats));
