@@ -30,13 +30,14 @@ const envSchema = z
       .transform((v) => ["1", "true", "yes"].includes(v.toLowerCase())),
     DEV_MASTER_OTP: z.string().regex(/^\d*$/, "DEV_MASTER_OTP must be digits").default(""),
 
-    /* ---- OTP delivery (MeraOTP — same provider the legacy app used) ---- */
+    /* ---- OTP delivery (MeraOTP v1 API — the provider generates the OTP) ---- */
     /** empty => no SMS is attempted; dev mode logs the code instead */
     MERAOTP_API_KEY: z.string().default(""),
-    MERAOTP_URL: z.string().url().default("https://meraotp.in/api/sendSMS"),
-    MERAOTP_SENDER_ID: z.string().default("MRAOTP"),
-    MERAOTP_BRAND_NAME: z.string().default("LPLUDO"),
-    MERAOTP_MESSAGE_TYPE: z.string().default("AUTH_OTP"),
+    MERAOTP_SEND_URL: z.string().url().default("https://meraotp.in/api/v1/otp/send"),
+    MERAOTP_VERIFY_URL: z.string().url().default("https://meraotp.in/api/v1/otp/verify"),
+    /** fixed authentication purpose the provider expects */
+    MERAOTP_PURPOSE: z.string().default("login"),
+    MERAOTP_OTP_LENGTH: z.coerce.number().int().min(4).max(8).default(6),
     MERAOTP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30_000).default(10_000),
 
     LOCAL_STORAGE_DIR: z.string().default(".local-storage"),
