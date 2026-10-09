@@ -93,16 +93,16 @@ export default function Home() {
 
       <div className="flex flex-col gap-4">
         <GameCard
-          title="Classic Web Ludo"
-          subtitle="Play the Most Popular Ludo Game Format"
+          title="Classic Manual Ludo"
+          subtitle="Ludo King mode is now available"
           cta="Play Now"
           image="/ludo-classic-manual.jpg"
           imageAlt="Classic Web Ludo poster"
           onPlay={() => navigate("/play")}
         />
         <GameCard
-          title="Classic App Ludo"
-          subtitle="Ludo King Mode is now available!"
+          title="Classic Web Ludo"
+          subtitle="Web ludo is coming soon !"
           cta="Coming Soon"
           image="/lp-ludo-player.jpg"
           imageAlt="Classic App Ludo poster"
