@@ -136,19 +136,25 @@ export default function Wallet() {
 
   async function submitDeposit() {
     const paise = toPaise(amount);
-    if (paise === null) return;
-    if (paise % 5000 !== 0) {
-      toast.error("Deposit amount must be a multiple of ₹50");
+    if (paise === null) {
+      toast.error("Please enter a valid amount");
       return;
     }
+
+    // Check multiple of ₹50 (5000 paise)
+    if (paise % 5000 !== 0) {
+      const errMsg = "Deposit amount must be in multiples of ₹50!";
+      toast.error(errMsg);
+      triggerDepositNotification("Invalid Deposit Amount", errMsg);
+      return;
+    }
+
     setBusy(true);
     try {
       await api("/payments/deposit", { method: "POST", body: { amountPaise: paise, utr: utr.trim() } });
       
-      // Toast notification
       toast.success("Deposit submitted. Wait for admin approval.");
 
-      // Browser push notification trigger
       triggerDepositNotification(
         "Deposit Request Submitted",
         `Your deposit of ${formatPaise(paise)} with UTR: ${utr} was submitted successfully.`
@@ -171,16 +177,23 @@ export default function Wallet() {
    */
   async function submitGatewayDeposit() {
     const paise = toPaise(amount);
-    if (paise === null) return;
-    if (paise % 5000 !== 0) {
-      toast.error("Deposit amount must be a multiple of ₹50");
+    if (paise === null) {
+      toast.error("Please enter a valid amount");
       return;
     }
+
+    // Check multiple of ₹50 (5000 paise)
+    if (paise % 5000 !== 0) {
+      const errMsg = "Deposit amount must be in multiples of ₹50!";
+      toast.error(errMsg);
+      triggerDepositNotification("Invalid Deposit Amount", errMsg);
+      return;
+    }
+
     setBusy(true);
     try {
       const res = await api("/payments/deposit/gateway", { method: "POST", body: { amountPaise: paise } });
 
-      // Trigger browser notification before redirecting
       triggerDepositNotification(
         "Initiating Payment",
         `Redirecting to complete payment of ${formatPaise(paise)}.`
@@ -259,6 +272,11 @@ export default function Wallet() {
             <div className="space-y-3">
               {depositId && <GatewayDepositCard depositId={depositId} onClose={closeDepositCard} />}
 
+              {/* Deposit UPI Policy Notice Box */}
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-center text-xs font-bold text-red-700 shadow-sm">
+                जिस UPI से Deposit होगा उसी UPI पर Withdraw होगा !
+              </div>
+
               {g?.gatewayUnavailable && !gatewayMode && (
                 <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
                   Instant UPI is temporarily unavailable — pay by UPI transfer below and submit the UTR number.
@@ -280,7 +298,7 @@ export default function Wallet() {
                 }
               />
 
-              {/* quick amounts in multiples of 50 */}
+              {/* Quick amounts in multiples of 50 */}
               <div className="flex gap-2">
                 {[50, 100, 250, 500].map((preset) => (
                   <button
@@ -308,9 +326,8 @@ export default function Wallet() {
                     className="w-full"
                     onClick={submitGatewayDeposit}
                     loading={busy}
-                    disabled={gatewayPaise === null || gatewayPaise % 5000 !== 0}
                   >
-                    Pay {formatPaise(gatewayPaise)} instantly
+                    Pay {gatewayPaise ? formatPaise(gatewayPaise) : ""} instantly
                   </Button>
                   <p className="text-[11px] text-slate-500">
                     You will be taken to the secure UPI checkout (QR + PhonePe / Paytm / GPay).
@@ -345,7 +362,7 @@ export default function Wallet() {
                     className="w-full"
                     onClick={submitDeposit}
                     loading={busy}
-                    disabled={!amount || utr.trim().length < 6 || (safePaise(amount) ?? 1) % 5000 !== 0}
+                    disabled={!amount || utr.trim().length < 6}
                   >
                     Submit deposit
                   </Button>
