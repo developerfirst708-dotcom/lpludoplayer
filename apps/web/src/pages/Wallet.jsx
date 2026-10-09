@@ -19,16 +19,10 @@ const LEDGER_LABELS = {
   withdrawal_hold: "Withdrawal on hold",
   withdrawal_paid: "Withdrawal paid",
   withdrawal_refund: "Withdrawal refunded",
-  entry_fee_hold: "Stake held",
-  entry_fee_release: "Stake released",
-  entry_fee_paid: "Stake played",
-  entry_fee_refund: "Stake refunded",
-  prize_win: "Prize won",
-  referral_commission: "Referral commission",
-  referral_redeem: "Referral redeemed",
-  referral_bonus: "Referral bonus",
-  admin_adjustment: "Admin adjustment",
 };
+
+// Filter allowed ledger types: Only Deposits & Withdrawals
+const DISPLAY_TYPES = ["deposit", "withdrawal_hold", "withdrawal_paid", "withdrawal_refund"];
 
 /** non-throwing paise parse — render paths must never toast */
 function safePaise(input) {
@@ -65,8 +59,7 @@ export default function Wallet() {
   const wallet = useQuery({ queryKey: ["wallet"], queryFn: () => api("/wallet") });
   const profile = useQuery({ queryKey: ["profile"], queryFn: () => api("/user/profile") });
   const details = useQuery({ queryKey: ["deposit-details"], queryFn: () => api("/payments/deposit/details") });
-  const history = useQuery({ queryKey: ["wallet", "history"], queryFn: () => api("/wallet/history?limit=30") });
-  const myDeposits = useQuery({ queryKey: ["deposits", "mine"], queryFn: () => api("/payments/deposits?limit=10") });
+  const history = useQuery({ queryKey: ["wallet", "history"], queryFn: () => api("/wallet/history?limit=50") });
 
   const [searchParams, setSearchParams] = useSearchParams();
   const depositId = searchParams.get("deposit");
@@ -75,12 +68,6 @@ export default function Wallet() {
   useEffect(() => {
     if (depositId) setTab("deposit");
   }, [depositId]);
-
-  function openDepositCard(id) {
-    const next = new URLSearchParams(searchParams);
-    next.set("deposit", id);
-    setSearchParams(next, { replace: true });
-  }
 
   function closeDepositCard() {
     const next = new URLSearchParams(searchParams);
@@ -91,7 +78,7 @@ export default function Wallet() {
     qc.invalidateQueries({ queryKey: ["wallet", "history"] });
   }
 
-  // realtime: admin approvals / settlement credits land here without a reload (F2)
+  // realtime: admin approvals / settlement credits land here without a reload
   useEffect(() => {
     if (!socket.connected) socket.connect();
     function onWallet(view) {
@@ -131,6 +118,7 @@ export default function Wallet() {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["wallet"] }),
       qc.invalidateQueries({ queryKey: ["profile"] }),
+      qc.invalidateQueries({ queryKey: ["wallet", "history"] }),
     ]);
   }
 
@@ -258,6 +246,9 @@ export default function Wallet() {
   const gatewayMode = Boolean(g?.gatewayEnabled) && gatewayPaise !== null && gatewayPaise < g.gatewayThresholdPaise;
   const showManualForm = Boolean(g) && (!g.gatewayEnabled || (gatewayPaise !== null && !gatewayMode));
 
+  // Filter history to display ONLY deposits and withdrawals
+  const filteredHistory = (history.data?.items || []).filter((item) => DISPLAY_TYPES.includes(item.type));
+
   return (
     <div className="space-y-4">
       <Tabs value={tab} onChange={setTab}>
@@ -268,7 +259,7 @@ export default function Wallet() {
         </TabsList>
 
         <TabsPanel match={tab} value="deposit">
-          <Panel title="Add funds">
+          <Panel title="Add funds" className="border-amber-200 bg-amber-50/70">
             <div className="space-y-3">
               {depositId && <GatewayDepositCard depositId={depositId} onClose={closeDepositCard} />}
 
@@ -278,7 +269,7 @@ export default function Wallet() {
               </div>
 
               {g?.gatewayUnavailable && !gatewayMode && (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
+                <p className="rounded-xl border border-amber-200 bg-amber-100 px-3 py-2 text-[11px] font-semibold text-amber-800">
                   Instant UPI is temporarily unavailable — pay by UPI transfer below and submit the UTR number.
                 </p>
               )}
@@ -305,7 +296,7 @@ export default function Wallet() {
                     key={preset}
                     type="button"
                     onClick={() => setAmount(String(preset))}
-                    className="flex-1 rounded-xl border border-gray-200 bg-gray-50 py-1.5 text-xs font-bold text-slate-700 transition-all hover:border-brand-500/50 active:scale-95"
+                    className="flex-1 rounded-xl border border-amber-200 bg-white py-1.5 text-xs font-bold text-slate-700 transition-all hover:border-brand-500/50 active:scale-95"
                   >
                     +₹{preset}
                   </button>
@@ -313,7 +304,7 @@ export default function Wallet() {
               </div>
 
               {g?.gatewayEnabled && gatewayPaise === null && (
-                <p className="rounded-xl bg-gray-50 px-3 py-2 text-[11px] text-slate-500">
+                <p className="rounded-xl bg-amber-100/60 px-3 py-2 text-[11px] text-slate-600">
                   Under {formatPaise(g.gatewayThresholdPaise)} you pay instantly with UPI (QR / UPI apps) and the
                   balance is credited automatically. {formatPaise(g.gatewayThresholdPaise)} or more is a UPI
                   transfer with a UTR number.
@@ -329,7 +320,7 @@ export default function Wallet() {
                   >
                     Pay {gatewayPaise ? formatPaise(gatewayPaise) : ""} instantly
                   </Button>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-slate-600">
                     You will be taken to the secure UPI checkout (QR + PhonePe / Paytm / GPay).
                     {gatewayPaise !== null && gatewayPaise % 5000 !== 0
                       ? " Deposit amount must be in multiples of ₹50."
@@ -339,9 +330,9 @@ export default function Wallet() {
               )}
 
               {showManualForm && (
-                <div className="space-y-3 border-t border-gray-100 pt-3">
+                <div className="space-y-3 border-t border-amber-200/80 pt-3">
                   {g?.upiId && (
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-[#FAD655] bg-[#FEF4BA]/60 px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-[#FAD655] bg-[#FEF4BA]/90 px-3 py-2.5">
                       <div className="min-w-0">
                         <p className="text-[11px] font-bold uppercase tracking-wide text-amber-700">Pay to</p>
                         <p className="truncate font-mono text-sm font-black text-slate-800">{g.upiId}</p>
@@ -366,43 +357,9 @@ export default function Wallet() {
                   >
                     Submit deposit
                   </Button>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-slate-600">
                     Pay the exact amount (multiple of ₹50) to the UPI ID above, then submit the UTR. An admin verifies and credits your wallet.
                   </p>
-                </div>
-              )}
-
-              {myDeposits.data?.items?.length > 0 && (
-                <div className="space-y-1 border-t border-gray-100 pt-3">
-                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Recent deposits</p>
-                  <ul className="divide-y divide-gray-100">
-                    {myDeposits.data.items.map((d) => (
-                      <li key={d.id}>
-                        <button
-                          type="button"
-                          onClick={() => d.method === "gateway" && openDepositCard(d.id)}
-                          className={`flex w-full items-center justify-between gap-2 py-2 text-left ${
-                            d.method === "gateway" ? "cursor-pointer" : "cursor-default"
-                          }`}
-                        >
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-slate-700">{formatPaise(d.amountPaise)}</p>
-                            <p className="text-[11px] text-slate-400">
-                              {d.method === "gateway" ? "Instant UPI" : "UPI transfer"} ·{" "}
-                              {new Date(d.createdAt).toLocaleString()}
-                            </p>
-                            {d.gatewayNote && (
-                              <p className="text-[11px] font-semibold text-amber-700">{d.gatewayNote}</p>
-                            )}
-                            {d.rejectReason && !d.gatewayNote && (
-                              <p className="text-[11px] text-slate-400">{d.rejectReason}</p>
-                            )}
-                          </div>
-                          <Badge status={d.status} />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
                 </div>
               )}
             </div>
@@ -410,7 +367,7 @@ export default function Wallet() {
         </TabsPanel>
 
         <TabsPanel match={tab} value="withdraw">
-          <Panel title="Withdraw funds">
+          <Panel title="Withdraw funds" className="border-amber-200 bg-amber-50/70">
             {kycVerified ? (
               <div className="space-y-3">
                 <Input
@@ -430,7 +387,7 @@ export default function Wallet() {
                 <Button className="w-full" onClick={submitWithdraw} loading={busy} disabled={!amount || !upiId.trim()}>
                   Request withdrawal
                 </Button>
-                <p className="text-[11px] text-slate-500">The amount is put on hold immediately and paid out by an admin.</p>
+                <p className="text-[11px] text-slate-600">The amount is put on hold immediately and paid out by an admin.</p>
               </div>
             ) : (
               <Empty title="KYC required" hint="Open KYC Verification from your Profile to unlock withdrawals." />
@@ -441,12 +398,12 @@ export default function Wallet() {
         <TabsPanel match={tab} value="history">
           <Panel title="Transaction history">
             {history.isLoading && <Spinner />}
-            {history.data && history.data.items.length === 0 && (
-              <Empty title="No transactions yet" hint="Deposits, stakes and prizes all appear here." />
+            {!history.isLoading && filteredHistory.length === 0 && (
+              <Empty title="No deposits or withdrawals yet" hint="Your deposits and withdrawal requests will appear here." />
             )}
-            {history.data && history.data.items.length > 0 && (
+            {!history.isLoading && filteredHistory.length > 0 && (
               <ul className="divide-y divide-gray-100">
-                {history.data.items.map((row) => (
+                {filteredHistory.map((row) => (
                   <li key={row.id} className="flex items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-bold text-slate-700">{LEDGER_LABELS[row.type] || row.type}</p>
