@@ -39,6 +39,20 @@ function safePaise(input) {
   }
 }
 
+/** Helper function to send native web/browser push notification */
+async function triggerDepositNotification(title, body) {
+  if (!("Notification" in window)) return;
+
+  if (Notification.permission === "granted") {
+    new Notification(title, { body, icon: "/favicon.ico" });
+  } else if (Notification.permission !== "denied") {
+    const permission = await Notification.requestPermission();
+    if (permission === "granted") {
+      new Notification(title, { body, icon: "/favicon.ico" });
+    }
+  }
+}
+
 export default function Wallet() {
   const toast = useToast();
   const qc = useQueryClient();
@@ -130,7 +144,16 @@ export default function Wallet() {
     setBusy(true);
     try {
       await api("/payments/deposit", { method: "POST", body: { amountPaise: paise, utr: utr.trim() } });
+      
+      // Toast notification
       toast.success("Deposit submitted. Wait for admin approval.");
+
+      // Browser push notification trigger
+      triggerDepositNotification(
+        "Deposit Request Submitted",
+        `Your deposit of ${formatPaise(paise)} with UTR: ${utr} was submitted successfully.`
+      );
+
       setAmount("");
       setUtr("");
       await refreshAll();
@@ -156,6 +179,13 @@ export default function Wallet() {
     setBusy(true);
     try {
       const res = await api("/payments/deposit/gateway", { method: "POST", body: { amountPaise: paise } });
+
+      // Trigger browser notification before redirecting
+      triggerDepositNotification(
+        "Initiating Payment",
+        `Redirecting to complete payment of ${formatPaise(paise)}.`
+      );
+
       if (res.paymentUrl) {
         window.location.href = res.paymentUrl; // hosted checkout (QR + UPI apps)
       } else {
