@@ -17,7 +17,7 @@ import { Button, Empty, SectionTitle, Skeleton } from "../components/ui.jsx";
  * Endpoints (verified against contest.routes.js):
  *   GET  /contests/open        open battles
  *   GET  /contests/mine        my battles (all statuses)
- *   POST /contests             { stake } — stake is HELD, not spent
+ *   POST /contests             { amount } — amount is HELD, not spent
  *   POST /contests/:id/join    second seat (both holds land before play)
  *   POST /contests/:id/cancel  refunds the creator's hold
  */
@@ -58,12 +58,12 @@ const FAKE_RUNNING_BATTLES = FAKE_RUNNING_AMOUNTS.map((amount, index) => {
   let opponentName = makeFakeName();
   while (opponentName === creatorName) opponentName = makeFakeName();
 
-  const stakePaise = rupeesToPaise(amount);
+  const amountPaise = rupeesToPaise(amount);
   return {
     id: `fake_run_${index + 1}`,
     battleId: `fake_run_${index + 1}`,
-    stake: stakePaise,
-    prize: computePrize(stakePaise).prizePaise,
+    amount: amountPaise,
+    prize: computePrize(amountPaise).prizePaise,
     status: "running",
     isFake: true,
     createdBy: { name: creatorName },
@@ -167,7 +167,7 @@ export default function Play() {
   const previewPaise = useMemo(() => {
     const amt = Number(betAmount);
     if (!Number.isFinite(amt) || amt < MIN_AMOUNT || amt > MAX_AMOUNT || amt % AMOUNT_STEP !== 0) return null;
-    return { stake: rupeesToPaise(amt), ...computePrize(rupeesToPaise(amt)) };
+    return { amount: rupeesToPaise(amt), ...computePrize(rupeesToPaise(amt)) };
   }, [betAmount]);
 
   function invalidate() {
@@ -211,15 +211,15 @@ export default function Play() {
     }
 
     const amt = Number(betAmount);
-    const stake = rupeesToPaise(amt);
-    if (mySearchingBattles.some((c) => c.stake === stake)) {
+    const amount = rupeesToPaise(amt);
+    if (mySearchingBattles.some((c) => c.amount === amount)) {
       toast.error(`You already have an open battle of ₹${amt}`);
       return;
     }
 
     try {
       setActionLoading(true);
-      await api("/contests", { method: "POST", body: { stake } });
+      await api("/contests", { method: "POST", body: { amount } });
       setBetAmount("");
       toast.success("Battle created — waiting for an opponent");
       invalidate();
@@ -251,7 +251,7 @@ export default function Play() {
     try {
       setActionLoading(true);
       await api(`/contests/${battleId}/cancel`, { method: "POST" });
-      toast.success("Battle cancelled — stake refunded");
+      toast.success("Battle cancelled — amount refunded");
       invalidate();
     } catch (err) {
       reportError(err);
@@ -392,11 +392,11 @@ function OpenCard({ battle, action }) {
       </div>
 
       <div className="grid grid-cols-3 items-center gap-2 px-3 py-3">
-        <MoneyBlock label="Entry Fee" value={battle.stake} />
+        <MoneyBlock label="Entry Fee" value={battle.amount} />
 
         <div className="flex shrink-0 justify-center">{action}</div>
 
-        <MoneyBlock label="Winning" value={battle.prize ?? computePrize(battle.stake).prizePaise} right />
+        <MoneyBlock label="Winning" value={battle.prize ?? computePrize(battle.amount).prizePaise} right />
       </div>
     </article>
   );
@@ -412,7 +412,7 @@ function MatchCard({ battle, onClick }) {
 
   const creatorName = creatorOf(battle)?.name || battle.createdBy?.name || "Player";
   const opponentName = opponentOf(battle)?.name || battle.opponent?.name || "Opponent";
-  const prize = battle.prize ?? computePrize(battle.stake).prizePaise;
+  const prize = battle.prize ?? computePrize(battle.amount).prizePaise;
 
   return (
     <article
@@ -427,7 +427,7 @@ function MatchCard({ battle, onClick }) {
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-300 via-brand-500 to-[#C98509] text-[10px] font-black text-white shadow-sm">
             ₹
           </span>
-          <span className="truncate text-xs font-black text-amber-950">{formatPaise(battle.stake, { withSymbol: false })}</span>
+          <span className="truncate text-xs font-black text-amber-950">{formatPaise(battle.amount, { withSymbol: false })}</span>
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5">
