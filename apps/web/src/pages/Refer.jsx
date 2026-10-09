@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
 import { formatPaise } from "@lpludo/shared";
 import { useToast } from "../components/Toast.jsx";
-import { Button, Panel, Skeleton } from "../components/ui.jsx";
+import { Panel, Skeleton } from "../components/ui.jsx";
 
 /**
  * Refer — the referral code, the invite link, a WhatsApp share and the live
@@ -58,27 +58,27 @@ export default function Refer() {
             <span className="flex-1 truncate px-2 font-mono text-sm font-black tracking-widest text-slate-800">
               {code || "—"}
             </span>
-            <Button
-              variant="ghost"
-              className="shrink-0 bg-amber-400 px-3.5 py-2 text-xs font-extrabold text-neutral-900 shadow-sm transition-all hover:bg-amber-500 active:scale-95 disabled:opacity-50"
+            <button
+              type="button"
+              className="shrink-0 rounded-lg bg-amber-400 hover:bg-amber-500 px-3.5 py-2 text-xs font-black text-neutral-900 shadow-sm transition-all active:scale-95 disabled:opacity-50"
               onClick={() => copy(code, "Code")}
               disabled={!code}
             >
               {copied === "Code" ? "Copied ✓" : "Copy Code"}
-            </Button>
+            </button>
           </div>
 
           {/* Referral Link Row */}
           <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-1.5">
             <span className="flex-1 truncate px-2 text-[11px] font-semibold text-slate-600">{link || "—"}</span>
-            <Button
-              variant="ghost"
-              className="shrink-0 bg-emerald-500 px-3.5 py-2 text-xs font-extrabold text-white shadow-sm transition-all hover:bg-emerald-600 active:scale-95 disabled:opacity-50"
+            <button
+              type="button"
+              className="shrink-0 rounded-lg bg-emerald-500 hover:bg-emerald-600 px-3.5 py-2 text-xs font-black text-white shadow-sm transition-all active:scale-95 disabled:opacity-50"
               onClick={() => copy(link, "Link")}
               disabled={!link}
             >
               {copied === "Link" ? "Copied ✓" : "Copy Link"}
-            </Button>
+            </button>
           </div>
 
           {/* WhatsApp Share Button */}
