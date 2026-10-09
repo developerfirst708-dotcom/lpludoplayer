@@ -1,18 +1,11 @@
-import React, { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api.js";
+import React, { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { socket } from "../lib/socket.js";
-import { Money, Panel, SectionTitle, StatusBadge } from "../components/ui.jsx";
-
-const LIVE_STATUSES = ["open", "running", "room_submitted", "result_submitted", "cancel_requested"];
+import { SectionTitle } from "../components/ui.jsx";
 
 /**
- * Home — the layout follows sample_ui_code/Home_page.txt: referral banner,
- * "Games" header, then game cards with the dark starfield thumbnail and a gold
- * "Play Now" pill. Play Now opens the Classic Web Ludo arena (/play) which
- * holds the stake picker + open battles. Home itself stays a pure launcher
- * with the referral banner, game cards and your live battles.
+ * Home — launcher layout with referral banner and game cards.
  */
 
 /** One game card: poster visual on top, white info footer below. */
@@ -53,9 +46,7 @@ export default function Home() {
   const qc = useQueryClient();
   const navigate = useNavigate();
 
-  const mine = useQuery({ queryKey: ["contests", "mine"], queryFn: () => api("/contests/mine") });
-
-  // realtime: socket deltas patch the queries instead of refetch storms (P1/F2)
+  // realtime socket connection to patch wallet/contest queries
   useEffect(() => {
     if (!socket.connected) socket.connect();
     function resubscribe() {
@@ -73,8 +64,6 @@ export default function Home() {
       socket.off("wallet:updated");
     };
   }, [qc]);
-
-  const liveBattles = (mine.data?.items || []).filter((c) => LIVE_STATUSES.includes(c.status));
 
   return (
     <div className="flex flex-col gap-4">
@@ -109,27 +98,6 @@ export default function Home() {
           disabled
         />
       </div>
-
-      {/* ---- live battle ---- */}
-      {liveBattles.length > 0 && (
-        <Panel title="Your live battles" className="border-brand-500/40 bg-brand-500/5">
-          <div className="flex flex-col divide-y divide-gray-100">
-            {liveBattles.map((c) => (
-              <Link
-                key={c.id}
-                to={`/battle/${c.id}`}
-                className="flex items-center justify-between py-2.5 text-sm font-bold text-slate-700"
-              >
-                <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-brand-500" />
-                  Stake <Money paise={c.stake} />
-                </span>
-                <StatusBadge status={c.status} />
-              </Link>
-            ))}
-          </div>
-        </Panel>
-      )}
     </div>
   );
 }
