@@ -73,7 +73,7 @@ export default function Home() {
         data-purpose="promo-banner"
       >
         <p className="text-center text-[13.5px] font-extrabold leading-snug tracking-tight text-neutral-950">
-          WELCOME TO LPLUDOPLAYER
+          WELCOME   TO   LPLUDOPLAYER
         </p>
       </section>
 
