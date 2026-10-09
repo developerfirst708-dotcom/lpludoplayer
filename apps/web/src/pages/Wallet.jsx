@@ -123,6 +123,10 @@ export default function Wallet() {
   async function submitDeposit() {
     const paise = toPaise(amount);
     if (paise === null) return;
+    if (paise % 5000 !== 0) {
+      toast.error("Deposit amount must be a multiple of ₹50");
+      return;
+    }
     setBusy(true);
     try {
       await api("/payments/deposit", { method: "POST", body: { amountPaise: paise, utr: utr.trim() } });
@@ -145,8 +149,8 @@ export default function Wallet() {
   async function submitGatewayDeposit() {
     const paise = toPaise(amount);
     if (paise === null) return;
-    if (paise % 100 !== 0) {
-      toast.error("Instant UPI payments must be in whole rupees");
+    if (paise % 5000 !== 0) {
+      toast.error("Deposit amount must be a multiple of ₹50");
       return;
     }
     setBusy(true);
@@ -237,12 +241,18 @@ export default function Wallet() {
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="500"
                 inputMode="decimal"
-                hint={g ? `Min ${formatPaise(g.minPaise)} · Max ${formatPaise(g.maxPaise)}${g.gatewayEnabled ? ` · instant under ${formatPaise(g.gatewayThresholdPaise)}` : ""}` : undefined}
+                hint={
+                  g
+                    ? `Min ${formatPaise(g.minPaise)} · Max ${formatPaise(g.maxPaise)} · Must be multiple of ₹50${
+                        g.gatewayEnabled ? ` · instant under ${formatPaise(g.gatewayThresholdPaise)}` : ""
+                      }`
+                    : "Must be a multiple of ₹50"
+                }
               />
 
-              {/* quick amounts (reference deposit screen) */}
+              {/* quick amounts in multiples of 50 */}
               <div className="flex gap-2">
-                {[100, 200, 500, 1000].map((preset) => (
+                {[50, 100, 250, 500].map((preset) => (
                   <button
                     key={preset}
                     type="button"
@@ -268,14 +278,14 @@ export default function Wallet() {
                     className="w-full"
                     onClick={submitGatewayDeposit}
                     loading={busy}
-                    disabled={gatewayPaise % 100 !== 0}
+                    disabled={gatewayPaise === null || gatewayPaise % 5000 !== 0}
                   >
                     Pay {formatPaise(gatewayPaise)} instantly
                   </Button>
                   <p className="text-[11px] text-slate-500">
                     You will be taken to the secure UPI checkout (QR + PhonePe / Paytm / GPay).
-                    {gatewayPaise % 100 !== 0
-                      ? " Whole rupee amounts only for instant payment."
+                    {gatewayPaise !== null && gatewayPaise % 5000 !== 0
+                      ? " Deposit amount must be in multiples of ₹50."
                       : " Your wallet is credited automatically as soon as the payment is confirmed."}
                   </p>
                 </>
@@ -301,11 +311,16 @@ export default function Wallet() {
                     onChange={(e) => setUtr(e.target.value.toUpperCase())}
                     placeholder="XXXXXXXXXXXX"
                   />
-                  <Button className="w-full" onClick={submitDeposit} loading={busy} disabled={!amount || utr.trim().length < 6}>
+                  <Button
+                    className="w-full"
+                    onClick={submitDeposit}
+                    loading={busy}
+                    disabled={!amount || utr.trim().length < 6 || (safePaise(amount) ?? 1) % 5000 !== 0}
+                  >
                     Submit deposit
                   </Button>
                   <p className="text-[11px] text-slate-500">
-                    Pay the exact amount to the UPI ID above, then submit the UTR. An admin verifies and credits your wallet.
+                    Pay the exact amount (multiple of ₹50) to the UPI ID above, then submit the UTR. An admin verifies and credits your wallet.
                   </p>
                 </div>
               )}
@@ -408,4 +423,3 @@ export default function Wallet() {
     </div>
   );
 }
-
