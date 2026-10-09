@@ -9,23 +9,23 @@ import { Button, Empty, SectionTitle, Skeleton } from "../components/ui.jsx";
 
 /**
  * Battle lobby — same-to-same as Adda Ludo's battle.jsx, on the new UI:
- *   • create a battle with any amount ₹50 – ₹1,00,000 in multiples of ₹50
+ *   • create a battle with any stake ₹50 – ₹1,00,000 in multiples of ₹50
  *   • open battles list ("Challenge From" + Entry Fee / Winning + PLAY|Cancel)
  *   • running battles list (Playing For / Prize + VIEW|Pending)
- *   • Adda guards: one active battle, max 2 searching battles, no duplicate amount
+ *   • Adda guards: one active battle, max 2 searching battles, no duplicate stake
  *
  * Endpoints (verified against contest.routes.js):
  *   GET  /contests/open        open battles
  *   GET  /contests/mine        my battles (all statuses)
- *   POST /contests             { amount } — amount is HELD, not spent
+ *   POST /contests             { stake } — stake is HELD, not spent
  *   POST /contests/:id/join    second seat (both holds land before play)
  *   POST /contests/:id/cancel  refunds the creator's hold
  */
 
 const MAX_SEARCHING_BATTLES = 2;
-const MIN_AMOUNT = 50;
-const MAX_AMOUNT = 100000;
-const AMOUNT_STEP = 50;
+const MIN_stake = 50;
+const MAX_stake = 100000;
+const stake_STEP = 50;
 
 const ACTIVE_STATUSES = ["join_requested", "running", "room_submitted", "result_submitted", "cancel_requested"];
 const RUNNING_STATUSES = ["join_requested", "running", "room_submitted", "result_submitted", "cancel_requested"];
@@ -47,23 +47,23 @@ const makeFakeName = () => {
   return out;
 };
 
-const FAKE_BATTLE_AMOUNTS = [
+const FAKE_BATTLE_stakeS = [
   1000, 2050, 500, 350, 3500, 450, 150, 500, 100, 1450, 350, 2050, 1900, 600, 2000, 200, 100, 2250, 150, 3500, 5500, 950, 50, 1050,
 ];
 
-const FAKE_RUNNING_AMOUNTS = FAKE_BATTLE_AMOUNTS.slice(0, 15);
+const FAKE_RUNNING_stakeS = FAKE_BATTLE_stakeS.slice(0, 15);
 
-const FAKE_RUNNING_BATTLES = FAKE_RUNNING_AMOUNTS.map((amount, index) => {
+const FAKE_RUNNING_BATTLES = FAKE_RUNNING_stakeS.map((stake, index) => {
   const creatorName = makeFakeName();
   let opponentName = makeFakeName();
   while (opponentName === creatorName) opponentName = makeFakeName();
 
-  const amountPaise = rupeesToPaise(amount);
+  const stakePaise = rupeesToPaise(stake);
   return {
     id: `fake_run_${index + 1}`,
     battleId: `fake_run_${index + 1}`,
-    amount: amountPaise,
-    prize: computePrize(amountPaise).prizePaise,
+    stake: stakePaise,
+    prize: computePrize(stakePaise).prizePaise,
     status: "running",
     isFake: true,
     createdBy: { name: creatorName },
@@ -80,7 +80,7 @@ export default function Play() {
   const qc = useQueryClient();
   const navigate = useNavigate();
 
-  const [betAmount, setBetAmount] = useState("");
+  const [betstake, setBetstake] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
   const open = useQuery({
@@ -165,10 +165,10 @@ export default function Play() {
   }, [myBattles]);
 
   const previewPaise = useMemo(() => {
-    const amt = Number(betAmount);
-    if (!Number.isFinite(amt) || amt < MIN_AMOUNT || amt > MAX_AMOUNT || amt % AMOUNT_STEP !== 0) return null;
-    return { amount: rupeesToPaise(amt), ...computePrize(rupeesToPaise(amt)) };
-  }, [betAmount]);
+    const amt = Number(betstake);
+    if (!Number.isFinite(amt) || amt < MIN_stake || amt > MAX_stake || amt % stake_STEP !== 0) return null;
+    return { stake: rupeesToPaise(amt), ...computePrize(rupeesToPaise(amt)) };
+  }, [betstake]);
 
   function invalidate() {
     qc.invalidateQueries({ queryKey: ["contests"] });
@@ -182,25 +182,25 @@ export default function Play() {
     else toast.error(msg);
   }
 
-  function validateAmount() {
-    const amt = Number(betAmount);
-    if (!amt || amt < MIN_AMOUNT) {
-      toast.error(`Min battle ₹${MIN_AMOUNT}`);
+  function validatestake() {
+    const amt = Number(betstake);
+    if (!amt || amt < MIN_stake) {
+      toast.error(`Min battle ₹${MIN_stake}`);
       return false;
     }
-    if (amt > MAX_AMOUNT) {
-      toast.error(`Max battle ₹${MAX_AMOUNT.toLocaleString("en-IN")}`);
+    if (amt > MAX_stake) {
+      toast.error(`Max battle ₹${MAX_stake.toLocaleString("en-IN")}`);
       return false;
     }
-    if (amt % AMOUNT_STEP !== 0) {
-      toast.error(`Amount must be in multiples of ₹${AMOUNT_STEP}`);
+    if (amt % stake_STEP !== 0) {
+      toast.error(`stake must be in multiples of ₹${stake_STEP}`);
       return false;
     }
     return true;
   }
 
   async function handleCreate() {
-    if (!validateAmount()) return;
+    if (!validatestake()) return;
     if (myActiveBattle) {
       toast.error("You are already in a game");
       return;
@@ -210,17 +210,17 @@ export default function Play() {
       return;
     }
 
-    const amt = Number(betAmount);
-    const amount = rupeesToPaise(amt);
-    if (mySearchingBattles.some((c) => c.amount === amount)) {
+    const amt = Number(betstake);
+    const stake = rupeesToPaise(amt);
+    if (mySearchingBattles.some((c) => c.stake === stake)) {
       toast.error(`You already have an open battle of ₹${amt}`);
       return;
     }
 
     try {
       setActionLoading(true);
-      await api("/contests", { method: "POST", body: { amount } });
-      setBetAmount("");
+      await api("/contests", { method: "POST", body: { stake } });
+      setBetstake("");
       toast.success("Battle created — waiting for an opponent");
       invalidate();
     } catch (err) {
@@ -251,7 +251,7 @@ export default function Play() {
     try {
       setActionLoading(true);
       await api(`/contests/${battleId}/cancel`, { method: "POST" });
-      toast.success("Battle cancelled — amount refunded");
+      toast.success("Battle cancelled — stake refunded");
       invalidate();
     } catch (err) {
       reportError(err);
@@ -314,13 +314,13 @@ export default function Play() {
           <input
             type="number"
             inputMode="numeric"
-            placeholder="Enter Amount"
+            placeholder="Enter stake"
             className="min-w-0 flex-1 bg-transparent py-2 text-sm font-semibold text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400"
-            value={betAmount}
-            min={MIN_AMOUNT}
-            max={MAX_AMOUNT}
-            step={AMOUNT_STEP}
-            onChange={(e) => setBetAmount(e.target.value)}
+            value={betstake}
+            min={MIN_stake}
+            max={MAX_stake}
+            step={stake_STEP}
+            onChange={(e) => setBetstake(e.target.value)}
           />
 
           <button
@@ -334,7 +334,7 @@ export default function Play() {
         </div>
 
         <p className="px-3 pb-1 pt-2 text-[11px] font-semibold text-sky-900/80">
-          Min ₹{MIN_AMOUNT} · Max ₹{MAX_AMOUNT.toLocaleString("en-IN")} · multiples of ₹{AMOUNT_STEP}
+          Min ₹{MIN_stake} · Max ₹{MAX_stake.toLocaleString("en-IN")} · multiples of ₹{stake_STEP}
           {previewPaise && (
             <>
               {" · "}
@@ -392,11 +392,11 @@ function OpenCard({ battle, action }) {
       </div>
 
       <div className="grid grid-cols-3 items-center gap-2 px-3 py-3">
-        <MoneyBlock label="Entry Fee" value={battle.amount} />
+        <MoneyBlock label="Entry Fee" value={battle.stake} />
 
         <div className="flex shrink-0 justify-center">{action}</div>
 
-        <MoneyBlock label="Winning" value={battle.prize ?? computePrize(battle.amount).prizePaise} right />
+        <MoneyBlock label="Winning" value={battle.prize ?? computePrize(battle.stake).prizePaise} right />
       </div>
     </article>
   );
@@ -412,7 +412,7 @@ function MatchCard({ battle, onClick }) {
 
   const creatorName = creatorOf(battle)?.name || battle.createdBy?.name || "Player";
   const opponentName = opponentOf(battle)?.name || battle.opponent?.name || "Opponent";
-  const prize = battle.prize ?? computePrize(battle.amount).prizePaise;
+  const prize = battle.prize ?? computePrize(battle.stake).prizePaise;
 
   return (
     <article
@@ -427,7 +427,7 @@ function MatchCard({ battle, onClick }) {
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-300 via-brand-500 to-[#C98509] text-[10px] font-black text-white shadow-sm">
             ₹
           </span>
-          <span className="truncate text-xs font-black text-amber-950">{formatPaise(battle.amount, { withSymbol: false })}</span>
+          <span className="truncate text-xs font-black text-amber-950">{formatPaise(battle.stake, { withSymbol: false })}</span>
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5">
