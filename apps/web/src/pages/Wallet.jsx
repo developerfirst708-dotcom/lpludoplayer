@@ -278,7 +278,7 @@ export default function Wallet() {
                 label="Amount (₹)"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder="500"
+                placeholder="Enter Amount"
                 inputMode="decimal"
                 hint={
                   g
