@@ -304,10 +304,10 @@ export default function Play() {
         <h2 className="text-base font-black tracking-tight text-ink">Create Battle</h2>
       </div>
 
-      {/* create battle — free amount, Adda rules */}
-      <div className="rounded-3xl border border-gray-100 bg-white p-2 shadow-card">
-        <div className="flex items-center gap-2 rounded-full bg-white p-2 ring-1 ring-gray-200">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-50 text-base font-black text-slate-700">
+      {/* create battle — Light Sky Blue Background */}
+      <div className="rounded-3xl border border-sky-200 bg-sky-50 p-2 shadow-card">
+        <div className="flex items-center gap-2 rounded-full bg-white p-2 ring-1 ring-sky-200">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-base font-black text-sky-800">
             ₹
           </div>
 
@@ -333,12 +333,12 @@ export default function Play() {
           </button>
         </div>
 
-        <p className="px-3 pb-1 pt-2 text-[11px] font-semibold text-slate-500">
+        <p className="px-3 pb-1 pt-2 text-[11px] font-semibold text-sky-900/80">
           Min ₹{MIN_AMOUNT} · Max ₹{MAX_AMOUNT.toLocaleString("en-IN")} · multiples of ₹{AMOUNT_STEP}
           {previewPaise && (
             <>
               {" · "}
-              <span className="font-bold text-brand-600">winner gets {formatPaise(previewPaise.prizePaise)}</span>
+              <span className="font-bold text-sky-700">winner gets {formatPaise(previewPaise.prizePaise)}</span>
             </>
           )}
         </p>
@@ -381,14 +381,14 @@ export default function Play() {
   );
 }
 
-/** Open battle: "Challenge From" band + Entry Fee | action | Winning. */
+/** Open battle: Light Green Background */
 function OpenCard({ battle, action }) {
   const creator = creatorOf(battle);
   return (
-    <article className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
-      <div className="flex items-center gap-2 border-b border-slate-100 bg-gray-100 px-3 py-2">
-        <h3 className="text-[11px] font-semibold text-gray-600">Challenge From</h3>
-        <h3 className="truncate text-[12px] font-black text-slate-900">{creator?.name || "Player"}</h3>
+    <article className="overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/60 shadow-card">
+      <div className="flex items-center gap-2 border-b border-emerald-200/80 bg-emerald-100/70 px-3 py-2">
+        <h3 className="text-[11px] font-semibold text-emerald-800">Challenge From</h3>
+        <h3 className="truncate text-[12px] font-black text-emerald-950">{creator?.name || "Player"}</h3>
       </div>
 
       <div className="grid grid-cols-3 items-center gap-2 px-3 py-3">
@@ -402,7 +402,7 @@ function OpenCard({ battle, action }) {
   );
 }
 
-/** Running battle: Playing For | Prize band + two players + VIEW/Pending. */
+/** Running battle: Light Yellow Background */
 function MatchCard({ battle, onClick }) {
   if (!battle) return null;
 
@@ -417,25 +417,25 @@ function MatchCard({ battle, onClick }) {
   return (
     <article
       onClick={onClick}
-      className={`cursor-pointer overflow-hidden rounded-2xl border bg-white shadow-card transition active:scale-[0.99] ${
-        isPending ? "border-orange-200" : "border-gray-100"
+      className={`cursor-pointer overflow-hidden rounded-2xl border bg-amber-50/70 shadow-card transition active:scale-[0.99] ${
+        isPending ? "border-orange-300 bg-amber-100/60" : "border-amber-200"
       }`}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-gray-100 px-3 py-1.5">
+      <div className="flex items-center justify-between gap-2 border-b border-amber-200/80 bg-amber-100/80 px-3 py-1.5">
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Playing For</span>
+          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-amber-900">Playing For</span>
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-300 via-brand-500 to-[#C98509] text-[10px] font-black text-white shadow-sm">
             ₹
           </span>
-          <span className="truncate text-xs font-black text-slate-900">{formatPaise(battle.stake, { withSymbol: false })}</span>
+          <span className="truncate text-xs font-black text-amber-950">{formatPaise(battle.stake, { withSymbol: false })}</span>
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Prize</span>
+          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-amber-900">Prize</span>
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-300 via-brand-500 to-[#C98509] text-[10px] font-black text-white shadow-sm">
             ₹
           </span>
-          <span className="truncate text-xs font-black text-slate-900">{formatPaise(prize, { withSymbol: false })}</span>
+          <span className="truncate text-xs font-black text-amber-950">{formatPaise(prize, { withSymbol: false })}</span>
         </div>
       </div>
 
@@ -505,7 +505,7 @@ function PlayerAvatar({ name }) {
 function MoneyBlock({ label, value, right = false }) {
   return (
     <div className={right ? "text-right" : "text-left"}>
-      <p className="text-[11px] font-medium text-slate-500">{label}</p>
+      <p className="text-[11px] font-medium text-slate-600">{label}</p>
       <p className="mt-0.5 text-sm font-black text-slate-950">{formatPaise(value || 0)}</p>
     </div>
   );
