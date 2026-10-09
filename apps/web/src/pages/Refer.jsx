@@ -53,22 +53,35 @@ export default function Refer() {
 
       <Panel title="Your referral code">
         <div className="space-y-3">
+          {/* Referral Code Row */}
           <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-1.5">
             <span className="flex-1 truncate px-2 font-mono text-sm font-black tracking-widest text-slate-800">
               {code || "—"}
             </span>
-            <Button variant="ghost" className="shrink-0 px-3.5 py-2 text-xs" onClick={() => copy(code, "Code")} disabled={!code}>
+            <Button
+              variant="ghost"
+              className="shrink-0 bg-amber-400 px-3.5 py-2 text-xs font-extrabold text-neutral-900 shadow-sm transition-all hover:bg-amber-500 active:scale-95 disabled:opacity-50"
+              onClick={() => copy(code, "Code")}
+              disabled={!code}
+            >
               {copied === "Code" ? "Copied ✓" : "Copy Code"}
             </Button>
           </div>
 
+          {/* Referral Link Row */}
           <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-1.5">
             <span className="flex-1 truncate px-2 text-[11px] font-semibold text-slate-600">{link || "—"}</span>
-            <Button variant="ghost" className="shrink-0 px-3.5 py-2 text-xs" onClick={() => copy(link, "Link")} disabled={!link}>
+            <Button
+              variant="ghost"
+              className="shrink-0 bg-emerald-500 px-3.5 py-2 text-xs font-extrabold text-white shadow-sm transition-all hover:bg-emerald-600 active:scale-95 disabled:opacity-50"
+              onClick={() => copy(link, "Link")}
+              disabled={!link}
+            >
               {copied === "Link" ? "Copied ✓" : "Copy Link"}
             </Button>
           </div>
 
+          {/* WhatsApp Share Button */}
           <a
             href={`https://wa.me/?text=${shareText}`}
             target="_blank"
@@ -85,15 +98,18 @@ export default function Refer() {
 
       <Panel title="Earnings">
         <div className="grid grid-cols-2 gap-2.5">
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3 text-center">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">👥 Total Referrals</p>
+          {/* Total Referrals Box - Light Yellow */}
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-3 text-center">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800">👥 Total Referrals</p>
             <p className="mt-1 text-lg font-black text-slate-800">
               {referrals.data?.totalReferred ?? 0}
               <span className="ml-1 text-[10px] font-semibold text-slate-500">players</span>
             </p>
           </div>
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3 text-center">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">💰 Total Earning</p>
+
+          {/* Total Earning Box - Light Green */}
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3 text-center">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800">💰 Total Earning</p>
             <p className="mt-1 text-lg font-black text-emerald-600">{formatPaise(referrals.data?.totalEarnedPaise ?? 0)}</p>
           </div>
         </div>
