@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
 import { socket } from "../lib/socket.js";
 import { Money, Panel, SectionTitle, StatusBadge } from "../components/ui.jsx";
-import { GiftIcon } from "../components/art.jsx";
 
 const LIVE_STATUSES = ["open", "running", "room_submitted", "result_submitted", "cancel_requested"];
 
@@ -19,7 +18,13 @@ const LIVE_STATUSES = ["open", "running", "room_submitted", "result_submitted", 
 /** One game card: poster visual on top, white info footer below. */
 function GameCard({ title, subtitle, cta, image, imageAlt, onPlay, disabled = false }) {
   return (
-    <article className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card" data-purpose="game-card">
+    <article
+      onClick={!disabled ? onPlay : undefined}
+      className={`overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card transition-all ${
+        !disabled ? "cursor-pointer hover:shadow-md" : ""
+      }`}
+      data-purpose="game-card"
+    >
       <div className="h-44 w-full overflow-hidden bg-gray-100">
         <img src={image} alt={imageAlt} loading="lazy" className="h-full w-full object-cover" />
       </div>
@@ -30,7 +35,10 @@ function GameCard({ title, subtitle, cta, image, imageAlt, onPlay, disabled = fa
         </div>
         <button
           type="button"
-          onClick={onPlay}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!disabled && onPlay) onPlay();
+          }}
           disabled={disabled}
           className="shrink-0 rounded-full bg-brand-500 px-5 py-2.5 text-xs font-extrabold tracking-normal text-neutral-900 shadow-btn-gold transition-all hover:bg-[#E5A81E] active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -70,22 +78,17 @@ export default function Home() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Referral banner (verbatim from the sample) */}
+      {/* Welcome banner */}
       <section
-        className="flex items-center gap-3 rounded-xl border border-[#FAD655] bg-gradient-to-b from-[#FEF4BA] via-[#FDE88C] to-[#FCD95B] p-3.5 shadow-sm"
+        className="flex items-center justify-center rounded-xl border border-[#FAD655] bg-gradient-to-b from-[#FEF4BA] via-[#FDE88C] to-[#FCD95B] p-3.5 shadow-sm"
         data-purpose="promo-banner"
       >
-        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center">
-          <GiftIcon className="h-9 w-9" />
-        </div>
-        <div className="flex-1">
-          <p className="text-[13.5px] font-extrabold leading-snug tracking-tight text-neutral-950">
-            Refer and Earn 2% Commission Lifetime!!
-          </p>
-        </div>
+        <p className="text-center text-[13.5px] font-extrabold leading-snug tracking-tight text-neutral-950">
+          WELCOME TO LPLUDOPLAYER
+        </p>
       </section>
 
-      {/* Games header + cards (posters: public/ludo-classic-manual.jpg + public/lp-ludo-player.jpg) */}
+      {/* Games header + cards */}
       <SectionTitle title="Games" hint="Classic Web Ludo is live. More formats are on the way." />
 
       <div className="flex flex-col gap-4">
@@ -130,4 +133,3 @@ export default function Home() {
     </div>
   );
 }
-
