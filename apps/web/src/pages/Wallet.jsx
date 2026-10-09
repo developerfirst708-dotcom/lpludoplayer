@@ -382,7 +382,7 @@ export default function Wallet() {
                   label="Your UPI ID"
                   value={upiId}
                   onChange={(e) => setUpiId(e.target.value)}
-                  placeholder="yourname@bank"
+                  placeholder="Enter your UPI "
                 />
                 <Button className="w-full" onClick={submitWithdraw} loading={busy} disabled={!amount || !upiId.trim()}>
                   Request withdrawal
