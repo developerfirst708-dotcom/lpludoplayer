@@ -6,10 +6,7 @@ import { useToast } from "../components/Toast.jsx";
 import { Button, Card, Input } from "../components/ui.jsx";
 
 /**
- * Login — mobile + OTP only. The display name is no longer collected here:
- * every new player is given a unique 5-letter code by the server on first
- * login (see apps/api/src/services/auth.service.js). A ?ref=… link (the link
- * shared from the Refer screen) prefills the referral code.
+ * Login — mobile + OTP only in a unified single container card.
  */
 export default function Login() {
   const toast = useToast();
@@ -56,17 +53,36 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col justify-center gap-6 px-6 py-10">
-      <div className="flex flex-col items-center gap-3 text-center">
-        {/* brand logo (public/logo.png) */}
-        <img src="/logo.png" alt="LP Ludo" className="aspect-square w-full max-w-[190px] rounded-full object-cover" />
-        <h1 className="text-2xl font-black tracking-tight text-ink">WELCOME TO LP LUDO </h1>
-        <p className="text-sm font-semibold text-slate-500">Sign in securely with your mobile number</p>
-      </div>
+    <div className="flex min-h-screen flex-col justify-center px-4 py-8">
+      {/* Unified Single Container Card */}
+      <Card className="flex flex-col gap-5 p-6 shadow-card border-[#FAD655]/60">
+        {/* Brand Header inside the Box */}
+        <div className="flex flex-col items-center gap-3 text-center">
+          <img
+            src="/logo.png"
+            alt="LP Ludo"
+            className="aspect-square w-32 rounded-full object-cover shadow-sm ring-2 ring-amber-300"
+          />
+          
+          {/* Welcome Title with spaced out words */}
+          <h1 className="text-xl font-black tracking-wider text-ink space-x-1.5">
+            <span>WELCOME</span>
+            <span>TO</span>
+            <span>LP</span>
+            <span>LUDO</span>
+          </h1>
+          
+          <p className="text-xs font-semibold text-slate-500">
+            Sign in securely with your mobile number
+          </p>
+        </div>
 
-      <Card className="p-5">
+        {/* Divider */}
+        <div className="h-[1px] w-full bg-gray-100" />
+
+        {/* Input Form Section inside the Box */}
         {step === "phone" ? (
-          <form onSubmit={requestOtp} className="flex flex-col gap-3">
+          <form onSubmit={requestOtp} className="flex flex-col gap-3.5">
             <Input
               label="Mobile number"
               inputMode="numeric"
@@ -75,13 +91,13 @@ export default function Login() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
-            <Button type="submit" className="w-full" loading={busy}>
+            <Button type="submit" className="w-full mt-1" loading={busy}>
               Send OTP
             </Button>
           </form>
         ) : (
-          <form onSubmit={doVerify} className="flex flex-col gap-3">
-            <p className="text-xs font-semibold text-slate-500">
+          <form onSubmit={doVerify} className="flex flex-col gap-3.5">
+            <p className="text-xs font-semibold text-slate-500 text-center">
               OTP sent to +91 {phone} {devOtp && <span className="font-bold text-brand-600">(dev: {devOtp})</span>}
             </p>
             <input
@@ -103,7 +119,7 @@ export default function Login() {
             <button
               type="button"
               onClick={() => setStep("phone")}
-              className="text-xs font-bold text-slate-400 transition-colors hover:text-slate-600"
+              className="text-xs font-bold text-slate-400 transition-colors hover:text-slate-600 text-center"
             >
               Change number
             </button>
@@ -111,7 +127,7 @@ export default function Login() {
         )}
       </Card>
 
-      <p className="text-center text-[11px] font-semibold text-slate-400">
+      <p className="mt-4 text-center text-[11px] font-semibold text-slate-400 px-2">
         By continuing you agree to our Terms & Conditions and Privacy Policy
       </p>
     </div>
