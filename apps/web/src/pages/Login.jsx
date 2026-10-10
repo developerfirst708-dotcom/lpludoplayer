@@ -60,8 +60,8 @@ export default function Login() {
       <div className="flex flex-col items-center gap-3 text-center">
         {/* brand logo (public/logo.png) */}
         <img src="/logo.png" alt="LP Ludo" className="aspect-square w-full max-w-[190px] rounded-full object-cover" />
-        <h1 className="text-2xl font-black tracking-tight text-ink">WELCOME</h1>
-        <p className="text-sm font-semibold text-slate-500">LP Ludo Player — 1v1 Ludo battles for real money</p>
+        <h1 className="text-2xl font-black tracking-tight text-ink">WELCOME TO LP LUDO </h1>
+        <p className="text-sm font-semibold text-slate-500">Sign in securely with your mobile number</p>
       </div>
 
       <Card className="p-5">
