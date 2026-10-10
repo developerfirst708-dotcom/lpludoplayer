@@ -66,21 +66,23 @@ export default function Home() {
   }, [qc]);
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Welcome banner */}
+    <div className="flex flex-col gap-6">
+      {/* Welcome banner with padding and top margin gap */}
       <section
-        className="flex items-center justify-center rounded-xl border border-[#FAD655] bg-gradient-to-b from-[#FEF4BA] via-[#FDE88C] to-[#FCD95B] p-3.5 shadow-sm"
+        className="my-2 flex items-center justify-center rounded-xl border border-[#FAD655] bg-gradient-to-b from-[#FEF4BA] via-[#FDE88C] to-[#FCD95B] py-4 px-3 shadow-sm"
         data-purpose="promo-banner"
       >
-        <p className="text-center text-[13.5px] font-extrabold leading-snug tracking-tight text-neutral-950">
-          WELCOME   TO   LPLUDOPLAYER
+        <p className="text-center text-[13.5px] font-extrabold leading-snug tracking-wider text-neutral-950 space-x-2">
+          <span>WELCOME</span>
+          <span>TO</span>
+          <span>LPludoplayer</span>
         </p>
       </section>
 
       {/* Games header + cards */}
-      <SectionTitle title="Games" hint="Classic Web Ludo is live. More formats are on the way." />
-
       <div className="flex flex-col gap-4">
+        <SectionTitle title="Games" hint="Classic Web Ludo is live. More formats are on the way." />
+
         <GameCard
           title="Classic Manual Ludo"
           subtitle="Ludo King mode is now available"
