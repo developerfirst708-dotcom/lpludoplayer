@@ -227,10 +227,10 @@ export default function Profile() {
       {/* Profile Navigation List with Light Yellow Border */}
       <div className="overflow-hidden rounded-2xl border border-[#FAD655]/70 bg-white shadow-card">
         <div className="divide-y divide-gray-100">
-          {/* History */}
+          {/* History -> Redirects to /history (slider history) */}
           <button
             type="button"
-            onClick={() => navigate("/wallet?tab=history")}
+            onClick={() => navigate("/history")}
             className="flex w-full items-center justify-between px-4 py-3.5 transition-colors hover:bg-gray-50 active:bg-gray-100"
           >
             <div className="flex items-center gap-3">
