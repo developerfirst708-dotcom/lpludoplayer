@@ -61,7 +61,7 @@ export default function Login() {
           <img
             src="/logo.png"
             alt="LP Ludo"
-            className="aspect-square w-32 rounded-full object-cover shadow-sm ring-2 ring-amber-300"
+            className="aspect-square w-32 rounded-full object-cover shadow-sm"
           />
           
           {/* Welcome Title with spaced out words */}
@@ -69,7 +69,7 @@ export default function Login() {
             <span>WELCOME</span>
             <span>TO</span>
             <span>LP</span>
-            <span>LUDO</span>
+            <span>LUDOPLAYER</span>
           </h1>
           
           <p className="text-xs font-semibold text-slate-500">
