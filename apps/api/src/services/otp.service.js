@@ -139,14 +139,17 @@ export async function createOtp(phone) {
   if (recently) throw new TooManyRequestsError("Please wait a minute before requesting another OTP");
   await client.set(`otp:last:${phone}`, "1", "EX", 60);
 
-  // local development: generate + keep the code ourselves, never call the provider
-  if (env.ALLOW_DEV_OTP) {
+  // OTP_ON=false (or dev mode): never call the provider — generate the code,
+  // keep it ourselves and print it to the log.
+  if (!env.OTP_ON || env.ALLOW_DEV_OTP) {
     const code = String(randomInt(100000, 1000000));
     await client.set(`otp:code:${phone}`, code, "EX", OTP_TTL_SECONDS);
     await client.del(ATTEMPT_KEY(phone));
-    l.warn({ phone }, "DEV OTP (ALLOW_DEV_OTP=true) — code printed to log only");
+    l.warn({ phone }, env.OTP_ON ? "DEV OTP (ALLOW_DEV_OTP=true) — code printed to log only" : "OTP_ON=false — OTP not sent, printed to log only");
     l.info({ phone, otp: code }, "OTP for local development");
-    return { sent: true, devOtp: isTest ? undefined : code };
+    // only the explicit dev flag echoes the code back; OTP_ON=false is log-only, so a
+    // mis-set production flag can never hand out logins through the API response
+    return { sent: true, devOtp: env.ALLOW_DEV_OTP && !isTest ? code : undefined };
   }
 
   try {
@@ -174,7 +177,7 @@ export async function verifyOtp(phone, otp) {
     return true;
   }
 
-  if (env.ALLOW_DEV_OTP) {
+  if (!env.OTP_ON || env.ALLOW_DEV_OTP) {
     const stored = await client.get(`otp:code:${phone}`);
     if (!stored) throw new BadRequestError("OTP expired or was never sent");
     if (otp !== stored) throw new BadRequestError("Incorrect OTP");

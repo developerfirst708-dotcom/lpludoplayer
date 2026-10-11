@@ -28,6 +28,15 @@ const envSchema = z
       .string()
       .default("false")
       .transform((v) => ["1", "true", "yes"].includes(v.toLowerCase())),
+    /**
+     * true  = send the OTP through the provider like normal.
+     * false = never send it; generate the code, print it to the logs and verify
+     *         it locally instead.
+     */
+    OTP_ON: z
+      .string()
+      .default("true")
+      .transform((v) => !["0", "false", "no"].includes(v.toLowerCase())),
     DEV_MASTER_OTP: z.string().regex(/^\d*$/, "DEV_MASTER_OTP must be digits").default(""),
 
     /* ---- OTP delivery (MeraOTP v1 API — the provider generates the OTP) ---- */
