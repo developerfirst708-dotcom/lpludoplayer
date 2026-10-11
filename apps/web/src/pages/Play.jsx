@@ -29,7 +29,9 @@ const MAX_stake = 100000;
 const stake_STEP = 50;
 
 const ACTIVE_STATUSES = ["join_requested", "running", "room_submitted", "result_submitted", "cancel_requested"];
-const RUNNING_STATUSES = ["join_requested", "running", "room_submitted", "result_submitted", "cancel_requested"];
+// only battles that have actually STARTED belong in "Running Battles" — a pending
+// join request (join_requested) stays in the Open list until the creator accepts
+const RUNNING_STATUSES = ["running", "room_submitted", "result_submitted", "cancel_requested"];
 
 const creatorOf = (c) => c?.players?.find((p) => p.seat === 1) || null;
 const opponentOf = (c) => c?.players?.find((p) => p.seat === 2) || null;

@@ -200,8 +200,6 @@ export default function Battle() {
     const me = c.players?.find((p) => p.isYou);
     const inBattle = Boolean(me);
     const isCreator = Boolean(c.players?.find((p) => p.seat === 1)?.isYou);
-    const bothSeated = (c.players?.length || 0) === 2;
-    const isTerminal = ["approved", "cancelled", "expired"].includes(c.status);
     const winner = c.winnerUserId ? c.players?.find((p) => String(p.userId) === String(c.winnerUserId)) : null;
     const youWon = Boolean(winner && winner.isYou);
     // has THIS player already filed their result? (the other player may still submit)
@@ -210,32 +208,25 @@ export default function Battle() {
 
     return (
       <div className="max-w-md mx-auto p-4 space-y-4 text-slate-950">
-        {/* Notice Banner */}
-        <div className="overflow-hidden rounded-xl bg-black p-3.5 text-[11px] leading-relaxed text-white shadow-md">
-          LPLUDO में आपका स्वागत है, सबसे Fast ⏩ विथड्रॉ है, 👉 मात्र 2-3 Min में। LPLUDO का APP आ गया है! 🙏
-        </div>
-
-        {/* Contest Header / Prize Card */}
+        {/* Battle header — both players + entry/winning amounts */}
         <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
-          <div className="game-thumb-container flex h-24 items-center justify-between px-5 bg-slate-900 text-white">
+          <div className="flex items-start justify-between gap-2 bg-slate-900 px-4 py-4 text-white">
+            <PlayerHead player={c.players?.find((p) => p.seat === 1)} />
+            <div className="flex flex-col items-center gap-1.5 pt-4">
+              <span className="text-xs font-black tracking-[0.3em] text-white/40">VS</span>
+              <StatusBadge status={c.status} />
+            </div>
+            <PlayerHead player={c.players?.find((p) => p.seat === 2)} />
+          </div>
+          <div className="flex items-center justify-between px-5 py-3">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wide text-indigo-300">Classic Ludo Battle</p>
-              <p className="mt-0.5 text-2xl font-black">
-                {formatPaise(c.stake * 2, { withSymbol: false })}
-                <span className="ml-1 text-xs font-bold text-white/60">pool</span>
-              </p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Entry amount</p>
+              <p className="text-base font-black text-slate-800">{formatPaise(c.stake)}</p>
             </div>
             <div className="text-right">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-white/50">Winner Prize</p>
-              <p className="text-xl font-black text-emerald-400">{formatPaise(c.prize)}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Winning amount</p>
+              <p className="text-base font-black text-emerald-600">{formatPaise(c.prize)}</p>
             </div>
-          </div>
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-50">
-            <div className="flex items-center gap-2">
-              <StatusBadge status={c.status} />
-              {!bothSeated && !isTerminal && <span className="text-[11px] font-bold text-slate-400">Seat 2 Open</span>}
-            </div>
-            <span className="text-xs font-bold text-slate-600">Entry: {formatPaise(c.stake)}</span>
           </div>
         </section>
 
@@ -314,32 +305,7 @@ export default function Battle() {
           </Panel>
         )}
 
-        {/* Players List */}
-        <Panel title="Players">
-          <div className="space-y-2">
-            {[1, 2].map((seat) => {
-              const p = c.players?.find((x) => x.seat === seat);
-              return (
-                <div key={seat} className={`flex items-center justify-between rounded-xl border px-3 py-2.5 ${p?.isYou ? "border-indigo-200 bg-indigo-50/50" : "border-gray-200 bg-gray-50"}`}>
-                  <div className="flex items-center gap-2.5">
-                    <div className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-black text-white ${p ? "bg-slate-800" : "bg-gray-300"}`}>
-                      {p?.name?.[0]?.toUpperCase() || "?"}
-                    </div>
-                    <div>
-                      <p className="text-sm font-black text-slate-800">{p?.name || "Waiting…"}</p>
-                      <p className="text-[11px] font-bold text-slate-400">Seat {seat}{p?.isYou ? " · You" : ""}</p>
-                    </div>
-                  </div>
-                  {p && winner && String(winner.userId) === String(p.userId) && (
-                    <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-700">WINNER</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
-
-        {/* Room Code Form / Display */}
+        {/* Room Code — moved up to where the Players block used to be */}
         {(c.status === "running" || c.status === "room_submitted" || c.status === "result_submitted") && inBattle && (
           <Panel title="Room Code">
             {c.roomCode ? (
@@ -374,6 +340,17 @@ export default function Battle() {
           </Panel>
         )}
 
+        {/* Rules */}
+        <Panel title="Rules">
+          <ul className="list-disc space-y-1.5 pl-5 text-xs font-semibold leading-relaxed text-slate-600">
+            <li>Both players must join the same Ludo King room with the code above.</li>
+            <li>Do not leave a running match — leaving before it ends counts as a loss.</li>
+            <li>Only a win claim needs a screenshot of the final result; a loss needs no proof.</li>
+            <li>Any dispute is reviewed by an admin and settled shortly.</li>
+            <li>Play fair — cheating leads to a penalty and account suspension.</li>
+          </ul>
+        </Panel>
+
         {/* Result Submission — any player who hasn't filed yet can submit, even
             after the opponent already did (status result_submitted / cancel_requested) */}
         {inBattle && !myReport && resultOpen && (
@@ -403,12 +380,11 @@ export default function Battle() {
                 </button>
               </div>
 
-              {(outcome === "won" || outcome === "lost") && (
+              {/* only a win claim needs proof — a loss needs no screenshot */}
+              {outcome === "won" && (
                 <div className="flex items-center justify-between rounded-xl border border-gray-200 p-3 bg-gray-50">
                   <div className="min-w-0">
-                    <p className="text-[10px] font-bold uppercase text-slate-400">
-                      {outcome === "won" ? "Winning Screenshot (Required)" : "Screenshot (Optional)"}
-                    </p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Winning screenshot (required)</p>
                     <p className="truncate text-xs font-bold text-slate-700">{screenshotName || "No file chosen"}</p>
                   </div>
                   {/* a label wrapping the input opens the native picker on every mobile browser */}
@@ -459,4 +435,22 @@ export default function Battle() {
 
   // No :id → the bare /battle route was removed (App redirects /battle → /play).
   return <Navigate to="/play" replace />;
+}
+
+/** one side of the battle header — avatar (real or generated) + name */
+function PlayerHead({ player }) {
+  const name = player?.name || "Waiting…";
+  return (
+    <div className="flex w-24 flex-col items-center gap-1">
+      <div className="h-14 w-14 overflow-hidden rounded-full bg-slate-700 ring-2 ring-white/20">
+        <img
+          src={player?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`}
+          alt={name}
+          className="h-full w-full object-cover"
+        />
+      </div>
+      <p className="w-full truncate text-center text-xs font-black">{name}</p>
+      {player?.isYou && <p className="text-[10px] font-bold text-white/40">You</p>}
+    </div>
+  );
 }

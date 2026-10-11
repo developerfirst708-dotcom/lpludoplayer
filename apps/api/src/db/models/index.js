@@ -8,6 +8,7 @@ import { DepositRequest } from "./depositRequest.model.js";
 import { WithdrawalRequest } from "./withdrawalRequest.model.js";
 import { AuditLog } from "./auditLog.model.js";
 import { Settings, getSettings } from "./settings.model.js";
+import { TrackedAccount } from "./trackedAccount.model.js";
 
 export {
   User,
@@ -19,6 +20,7 @@ export {
   AuditLog,
   Settings,
   getSettings,
+  TrackedAccount,
 };
 
-export const ALL_MODELS = [User, Wallet, Contest, LedgerEntry, DepositRequest, WithdrawalRequest, AuditLog, Settings];
+export const ALL_MODELS = [User, Wallet, Contest, LedgerEntry, DepositRequest, WithdrawalRequest, AuditLog, Settings, TrackedAccount];

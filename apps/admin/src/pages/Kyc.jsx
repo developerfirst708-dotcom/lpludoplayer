@@ -24,6 +24,7 @@ export default function Kyc() {
   const [page, setPage] = useState(1);
   const [review, setReview] = useState(null); // { row, action }
   const [note, setNote] = useState("");
+  const [previewKey, setPreviewKey] = useState(null); // full-size image viewer
 
   useEffect(() => { setPage(1); }, [status]);
 
@@ -102,8 +103,12 @@ export default function Kyc() {
                   label: "Documents",
                   render: (r) => (
                     <div className="flex gap-2">
-                      <AuthedImage fileKey={r.kyc?.docFrontKey} alt="ID front" className="h-12 w-12" />
-                      <AuthedImage fileKey={r.kyc?.docBackKey} alt="ID back" className="h-12 w-12" />
+                      {r.kyc?.docFrontKey ? (
+                        <AuthedImage fileKey={r.kyc.docFrontKey} alt="ID front" className="h-14 w-14" onClick={() => setPreviewKey(r.kyc.docFrontKey)} />
+                      ) : <span className="text-xs text-[#a56a83]">—</span>}
+                      {r.kyc?.docBackKey ? (
+                        <AuthedImage fileKey={r.kyc.docBackKey} alt="ID back" className="h-14 w-14" onClick={() => setPreviewKey(r.kyc.docBackKey)} />
+                      ) : null}
                     </div>
                   ),
                 },
@@ -163,19 +168,25 @@ export default function Kyc() {
         <div className="mb-3 flex flex-wrap gap-3">
           <div>
             <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#a56a83]">ID front</p>
-            <AuthedImage fileKey={review?.row?.kyc?.docFrontKey} alt="ID front" className="h-40 w-40" />
+            <AuthedImage fileKey={review?.row?.kyc?.docFrontKey} alt="ID front" className="h-52 w-52" onClick={() => setPreviewKey(review?.row?.kyc?.docFrontKey)} />
           </div>
           <div>
             <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#a56a83]">ID back</p>
-            <AuthedImage fileKey={review?.row?.kyc?.docBackKey} alt="ID back" className="h-40 w-40" />
+            <AuthedImage fileKey={review?.row?.kyc?.docBackKey} alt="ID back" className="h-52 w-52" onClick={() => setPreviewKey(review?.row?.kyc?.docBackKey)} />
           </div>
         </div>
+        <p className="mb-3 text-[11px] font-semibold text-[#a56a83]">Click an image to view it full-size.</p>
         <Input
           label={review?.action === "approve" ? "Note (optional)" : "Reason for rejection"}
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder={review?.action === "approve" ? "Looks good" : "Documents not readable"}
         />
+      </Modal>
+
+      {/* full-size document viewer */}
+      <Modal open={Boolean(previewKey)} onClose={() => setPreviewKey(null)} title="KYC document" wide>
+        <AuthedImage fileKey={previewKey} alt="KYC document" className="max-h-[75vh] w-full !cursor-default object-contain" />
       </Modal>
     </div>
   );

@@ -6,7 +6,7 @@ import mongoose from "mongoose";
  */
 const trackedAccountSchema = new mongoose.Schema(
   {
-    phone: { type: String, required: true, trim: true, index: true },
+    phone: { type: String, required: true, trim: true },
     name: { type: String, trim: true },
     note: { type: String, trim: true, maxlength: 300 },
     addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

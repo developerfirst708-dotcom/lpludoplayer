@@ -29,6 +29,7 @@ function contestDto(contest, { userId, includeRoomCode = false } = {}) {
       seat: p.seat,
       userId: p.userId?._id || p.userId,
       name: contest.isDummy && p.seat === 1 ? contest.dummyName : (p.userId?.name || null),
+      avatarUrl: p.userId?.avatarUrl || null,
       isYou: Boolean(userId && String(p.userId._id || p.userId) === String(userId)),
     })),
     prize: computePrize(contest.stake).prizePaise, // winner's credit (slab-based, same maths as settlement)
@@ -162,7 +163,7 @@ export async function submitResult(req, res) {
 
 /** GET /contests/:id — full detail for one contest (participants/admins only) */
 export async function getContest(req, res) {
-  const contest = await Contest.findById(req.params.id).select("+roomCode").populate("players.userId", "name");
+  const contest = await Contest.findById(req.params.id).select("+roomCode").populate("players.userId", "name avatarUrl");
   if (!contest) throw new NotFoundError("Battle not found");
   const isStaff = ["admin", "superadmin"].includes(req.user.role);
   if (!isStaff && !contest.isParticipant(req.user.id)) {
