@@ -1,5 +1,19 @@
 import { z } from "zod";
-import { objectIdSchema, phoneSchema } from "@lpludo/shared/schemas";
+import { objectIdSchema, phoneSchema, stakeSchema } from "@lpludo/shared/schemas";
+
+/** admin dummy (social-proof) battle */
+export const adminDummySchema = z.object({
+  stake: stakeSchema,
+  name: z.string().trim().min(2, "Enter a name").max(40).optional(),
+  mobile: z.string().trim().max(15).optional(),
+});
+
+/** admin client-tracking entry */
+export const trackedAccountSchema = z.object({
+  phone: phoneSchema,
+  name: z.string().trim().max(40).optional(),
+  note: z.string().trim().max(300).optional(),
+});
 
 /** admin / agent account management (superadmin only) */
 export const adminAccountCreateSchema = z.object({
@@ -30,10 +44,15 @@ export const adminAdjustmentSchema = z
   })
   .refine((d) => d.userId || d.phone, { message: "Enter a user id or a mobile number" });
 
+/** manual deposit: a payment screenshot is REQUIRED (reference rule) */
 export const depositClaimSchema = z.object({
-  amountPaise: z.number({ invalid_type_error: "Amount is required" }).int().min(1000, "Minimum deposit is ₹10"),
+  amountPaise: z
+    .number({ invalid_type_error: "Amount is required" })
+    .int()
+    .min(10000, "Minimum deposit is ₹100")
+    .max(10000000, "Maximum deposit is ₹1,00,000"),
   utr: z.string().trim().min(6, "UTR must be at least 6 characters").max(30),
-  proofImageKey: z.string().max(200).optional(),
+  proofImageKey: z.string().min(1, "A payment screenshot is required").max(200),
 });
 
 /** gateway deposits are whole rupees only (the gateway takes rupees, no paise) */
@@ -45,13 +64,31 @@ export const gatewayDepositSchema = z.object({
     .max(5000000, "Maximum deposit is ₹50,000"),
 });
 
-export const withdrawRequestSchema = z.object({
-  amountPaise: z
-    .number({ invalid_type_error: "Amount is required" })
-    .int()
-    .min(30000, "Minimum withdrawal is ₹300"),
-  upiId: z.string().trim().regex(/^[\w.-]{2,64}@[a-zA-Z]{2,32}$/, "Enter a valid UPI ID"),
-});
+/** withdraw: min ₹200, UPI for small amounts, bank required above ₹2000 (reference rules) */
+export const withdrawRequestSchema = z
+  .object({
+    amountPaise: z.number({ invalid_type_error: "Amount is required" }).int().min(20000, "Minimum withdrawal is ₹200"),
+    method: z.enum(["upi", "bank"]).default("upi"),
+    upiId: z.string().trim().regex(/^[\w.-]{2,64}@[a-zA-Z]{2,32}$/, "Enter a valid UPI ID").optional(),
+    bank: z
+      .object({
+        accountName: z.string().trim().min(2, "Enter the account holder name").max(80),
+        accountNumber: z.string().trim().regex(/^\d{6,20}$/, "Enter a valid account number"),
+        ifsc: z.string().trim().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, "Enter a valid IFSC code"),
+      })
+      .optional(),
+  })
+  .superRefine((d, ctx) => {
+    if (d.amountPaise > 200000 && d.method !== "bank") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["method"], message: "Withdrawals above ₹2000 must go to a bank account" });
+    }
+    if (d.method === "bank" && !d.bank) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bank"], message: "Enter your bank details" });
+    }
+    if (d.method === "upi" && !d.upiId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["upiId"], message: "Enter your UPI ID" });
+    }
+  });
 
 /** ad-hoc referral code (account created without one) */
 export const referralApplySchema = z.object({
@@ -82,10 +119,12 @@ export const adminKycReviewSchema = z.object({
 });
 
 export const adminSettingsSchema = z.object({
+  websiteName: z.string().trim().max(60).optional(),
   depositUpiId: z.string().trim().regex(/^[\w.-]{2,64}@[a-zA-Z]{2,32}$/, "Enter a valid UPI ID").optional(),
   depositUpiName: z.string().trim().max(60).optional(),
   depositMinPaise: z.number().int().min(1000).optional(),
-  withdrawalMinPaise: z.number().int().min(30000).optional(),
+  depositMaxPaise: z.number().int().min(1000).optional(),
+  withdrawalMinPaise: z.number().int().min(20000).optional(),
   /** gateway applies below this amount; manual UPI/UTR at or above it */
   depositGatewayMaxPaise: z.number().int().min(1000).optional(),
   maintenanceMode: z.boolean().optional(),

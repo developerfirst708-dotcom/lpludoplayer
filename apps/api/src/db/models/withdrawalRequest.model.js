@@ -9,9 +9,16 @@ import mongoose from "mongoose";
 const withdrawalRequestSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    amountPaise: { type: Number, required: true, min: 30000 }, // min ₹300
+    amountPaise: { type: Number, required: true, min: 20000 }, // min ₹200
 
-    upiId: { type: String, required: true, trim: true },
+    /** payout rail — UPI for small amounts, bank required above ₹2000 */
+    method: { type: String, enum: ["upi", "bank"], default: "upi", required: true },
+    upiId: { type: String, trim: true },
+    bank: {
+      accountName: { type: String, trim: true },
+      accountNumber: { type: String, trim: true },
+      ifsc: { type: String, trim: true, uppercase: true },
+    },
     status: {
       type: String,
       enum: ["requested", "approved", "paid", "rejected", "failed"],
@@ -35,5 +42,10 @@ const withdrawalRequestSchema = new mongoose.Schema(
 
 withdrawalRequestSchema.index({ status: 1, createdAt: -1 });
 withdrawalRequestSchema.index({ userId: 1, createdAt: -1 });
+/** one pending withdrawal per user at a time (reference rule) */
+withdrawalRequestSchema.index(
+  { userId: 1, status: 1 },
+  { unique: true, partialFilterExpression: { status: "requested" } }
+);
 
 export const WithdrawalRequest = mongoose.model("WithdrawalRequest", withdrawalRequestSchema);

@@ -18,13 +18,20 @@ const l = log("ledger");
  * @param {import("mongoose").ClientSession} [p.session] required for money moves
  * @param {number} p.amount       signed delta to wallet.totalPaise
  * @param {number} [p.heldDelta]  signed delta to wallet.heldPaise
+ * @param {number} [p.bonusDelta] signed delta to wallet.bonusPaise
+ * @param {number} [p.winningsDelta] signed delta to wallet.winningsPaise
  * @param {string} p.idempotencyKey deterministic, e.g. `prize:<contestId>:<userId>`
+ *
+ * The `balance` bucket is derived: balance = total - held - bonus - winnings, so
+ * a plain `amount` delta (no bonus/winnings delta) lands in `balance`.
  */
 export async function applyLedger({
   session,
   userId,
   amount,
   heldDelta = 0,
+  bonusDelta = 0,
+  winningsDelta = 0,
   referralDelta = 0,
   type,
   refType,
@@ -35,9 +42,9 @@ export async function applyLedger({
   actorId = null,
 }) {
   if (!session) throw new WalletError("applyLedger requires a transaction session");
-  if (!Number.isInteger(amount) || !Number.isInteger(heldDelta) || !Number.isInteger(referralDelta)) {
+  if (![amount, heldDelta, bonusDelta, winningsDelta, referralDelta].every(Number.isInteger)) {
     throw new WalletError(
-      `ledger deltas must be integers (amount=${amount}, heldDelta=${heldDelta}, referralDelta=${referralDelta})`
+      `ledger deltas must be integers (amount=${amount}, heldDelta=${heldDelta}, bonusDelta=${bonusDelta}, winningsDelta=${winningsDelta}, referralDelta=${referralDelta})`
     );
   }
 
@@ -56,14 +63,23 @@ export async function applyLedger({
 
   const newTotal = wallet.totalPaise + amount;
   const newHeld = wallet.heldPaise + heldDelta;
+  const newBonus = (wallet.bonusPaise || 0) + bonusDelta;
+  const newWinnings = (wallet.winningsPaise || 0) + winningsDelta;
   const newReferral = wallet.referralPaise + referralDelta;
+  // balance is whatever is left after the locked + bonus + winnings buckets
+  const newBalance = newTotal - newHeld - newBonus - newWinnings;
   if (newTotal < 0) throw new WalletError("insufficient balance", { need: -amount, have: wallet.totalPaise });
   if (newHeld < 0) throw new WalletError("cannot release more than is held", { heldDelta });
   if (newTotal - newHeld < 0) throw new WalletError("operation would overdraw available balance");
+  if (newBonus < 0) throw new WalletError("insufficient bonus balance", { bonusDelta });
+  if (newWinnings < 0) throw new WalletError("insufficient winnings balance", { winningsDelta });
+  if (newBalance < 0) throw new WalletError("insufficient balance", { need: -amount, have: wallet.totalPaise });
   if (newReferral < 0) throw new WalletError("insufficient referral balance", { need: -referralDelta, have: wallet.referralPaise });
 
   wallet.totalPaise = newTotal;
   wallet.heldPaise = newHeld;
+  wallet.bonusPaise = newBonus;
+  wallet.winningsPaise = newWinnings;
   wallet.referralPaise = newReferral;
   wallet.version += 1;
 
@@ -95,6 +111,8 @@ export async function applyLedger({
         userId,
         amount,
         heldDelta,
+        bonusDelta,
+        winningsDelta,
         referralDelta,
         balanceAfter: newTotal,
         availableAfter: newTotal - newHeld,
@@ -125,7 +143,7 @@ export async function applyLedger({
  */
 export async function reconcileWallet(userId, { session } = {}) {
   const wallet = await Wallet.findOne({ userId }).session(session);
-  if (!wallet) return { wallet: null, ledgerSum: 0, ledgerHeld: 0, ledgerReferral: 0, rows: 0, drift: 0, heldDrift: 0, referralDrift: 0 };
+  if (!wallet) return { wallet: null, ledgerSum: 0, ledgerHeld: 0, ledgerBonus: 0, ledgerWinnings: 0, ledgerReferral: 0, rows: 0, drift: 0, heldDrift: 0, bonusDrift: 0, winningsDrift: 0, referralDrift: 0 };
 
   const [agg] = await LedgerEntry.aggregate([
     { $match: { walletId: wallet._id } },
@@ -134,6 +152,8 @@ export async function reconcileWallet(userId, { session } = {}) {
         _id: null,
         total: { $sum: "$amount" },
         held: { $sum: "$heldDelta" },
+        bonus: { $sum: "$bonusDelta" },
+        winnings: { $sum: "$winningsDelta" },
         referral: { $sum: "$referralDelta" },
         rows: { $sum: 1 },
       },
@@ -142,15 +162,21 @@ export async function reconcileWallet(userId, { session } = {}) {
 
   const ledgerSum = agg?.total ?? 0;
   const ledgerHeld = agg?.held ?? 0;
+  const ledgerBonus = agg?.bonus ?? 0;
+  const ledgerWinnings = agg?.winnings ?? 0;
   const ledgerReferral = agg?.referral ?? 0;
   return {
     wallet,
     ledgerSum,
     ledgerHeld,
+    ledgerBonus,
+    ledgerWinnings,
     ledgerReferral,
     rows: agg?.rows ?? 0,
     drift: ledgerSum - wallet.totalPaise,
     heldDrift: ledgerHeld - wallet.heldPaise,
+    bonusDrift: ledgerBonus - (wallet.bonusPaise || 0),
+    winningsDrift: ledgerWinnings - (wallet.winningsPaise || 0),
     referralDrift: ledgerReferral - (wallet.referralPaise || 0),
   };
 }

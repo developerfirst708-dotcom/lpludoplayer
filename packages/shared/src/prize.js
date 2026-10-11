@@ -49,8 +49,11 @@ export function computePrize(entryFeePaise) {
   assertPaise(entryFeePaise);
   const totalPoolPaise = entryFeePaise * 2;
   const commissionBps = commissionBpsFor(entryFeePaise);
-  const commissionPaise = Math.floor((entryFeePaise * commissionBps) / 10000);
-  const prizePaise = totalPoolPaise - commissionPaise;
+  // Reference parity: the PRIZE is floored to whole rupees and the house keeps the
+  // remainder (this matters for odd-₹50 slab-2 stakes like ₹550, where 5% is ₹27.50).
+  const rawCommissionPaise = (entryFeePaise * commissionBps) / 10000;
+  const prizePaise = Math.floor((totalPoolPaise - rawCommissionPaise) / 100) * 100;
+  const commissionPaise = totalPoolPaise - prizePaise;
   return {
     entryFeePaise,
     totalPoolPaise,

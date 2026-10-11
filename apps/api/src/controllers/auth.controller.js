@@ -47,7 +47,11 @@ export async function verifyOtp(req, res) {
   res.json({
     accessToken: tokens.accessToken,
     user: { ...user.toPublic(), phone: user.phone },
-    wallet: wallet ? { totalPaise: wallet.totalPaise, heldPaise: wallet.heldPaise } : null,
+    wallet: wallet ? {
+      totalPaise: wallet.totalPaise, heldPaise: wallet.heldPaise,
+      bonusPaise: wallet.bonusPaise || 0, winningsPaise: wallet.winningsPaise || 0,
+      referralPaise: wallet.referralPaise || 0,
+    } : null,
   });
 }
 

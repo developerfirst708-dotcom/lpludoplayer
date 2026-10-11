@@ -11,6 +11,7 @@ import routes from "./routes/index.js";
 import { errorHandler, notFoundHandler } from "./middleware/errors.js";
 import { redisPing } from "./db/redis.js";
 import { assertReplicaSet } from "./db/connect.js";
+import { isMaintenanceOn } from "./services/maintenance.service.js";
 
 /** The HTTP app — built separately from server.js so tests can drive it without a port. */
 export const app = express();
@@ -63,6 +64,25 @@ async function mongoosePing() {
   await mongoose.connection.db.admin().command({ ping: 1 });
   await assertReplicaSet();
 }
+
+/**
+ * Maintenance mode — a superadmin toggles `settings.maintenanceMode` from the
+ * admin panel and every player endpoint answers 503 (reference behaviour).
+ * Admin, auth, public settings and payment webhooks stay reachable so the panel
+ * can switch it back off and money can still settle.
+ */
+app.use("/api", async (req, res, next) => {
+  const p = req.path;
+  if (p.startsWith("/admin") || p.startsWith("/settings/public") || p.startsWith("/auth") || p.startsWith("/webhooks")) {
+    return next();
+  }
+  try {
+    if (await isMaintenanceOn()) {
+      return res.status(503).json({ error: { code: "MAINTENANCE", message: "We are under maintenance — please try again shortly" } });
+    }
+  } catch { /* fall through */ }
+  next();
+});
 
 app.use("/api", routes);
 

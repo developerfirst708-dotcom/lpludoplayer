@@ -149,9 +149,9 @@ export async function myDeposits(req, res) {
 
 /* ----------------------------- withdrawals ---------------------------- */
 
-/** POST /payments/withdraw — holds the amount immediately (C5/C6/C7 fixed) */
+/** POST /payments/withdraw — winnings-only, one pending at a time (reference rules) */
 export async function requestWithdraw(req, res) {
-  const { amountPaise, upiId } = validate(withdrawRequestSchema, req.body);
+  const { amountPaise, method, upiId, bank } = validate(withdrawRequestSchema, req.body);
   const s = await getSettings();
   if (amountPaise < s.withdrawalMinPaise) {
     throw new BadRequestError(`Minimum withdrawal is ₹${s.withdrawalMinPaise / 100}`);
@@ -162,16 +162,25 @@ export async function requestWithdraw(req, res) {
     throw new ForbiddenError("KYC verification is required before withdrawing");
   }
 
+  // one pending withdrawal at a time (reference rule)
+  const pending = await WithdrawalRequest.findOne({ userId: req.user.id, status: "requested" }).lean();
+  if (pending) throw new ConflictError("You already have a pending withdrawal — wait for it to be reviewed");
+
+  // only the winnings bucket is withdrawable (reference rule)
+  await walletService.assertWinnings(req.user.id, amountPaise);
+
   const doc = await WithdrawalRequest.create({
     userId: req.user.id,
     amountPaise,
-    upiId,
+    method,
+    upiId: method === "upi" ? upiId : undefined,
+    bank: method === "bank" ? bank : undefined,
   });
   try {
     await walletService.holdWithdrawal({ userId: req.user.id, withdrawalId: doc._id, amountPaise });
   } catch (err) {
     await WithdrawalRequest.deleteOne({ _id: doc._id }); // hold failed -> remove the request
-    if (err?.name === "WalletError" || err?.status === 409) throw new ForbiddenError("Insufficient balance");
+    if (err?.name === "WalletError" || err?.status === 409) throw new ForbiddenError("Insufficient winnings");
     throw err;
   }
   // traceability: point at the exact ledger row created by the hold
@@ -197,7 +206,8 @@ export async function myWithdrawals(req, res) {
     .lean();
   res.json({
     items: items.map((w) => ({
-      id: w._id, amountPaise: w.amountPaise, status: w.status, upiId: w.upiId,
+      id: w._id, amountPaise: w.amountPaise, status: w.status, method: w.method || "upi",
+      upiId: w.upiId || null, bank: w.bank || null,
       rejectReason: w.rejectReason || null, providerRef: w.providerRef || null,
       createdAt: w.createdAt, paidAt: w.paidAt || null,
     })),

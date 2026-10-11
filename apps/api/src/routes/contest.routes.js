@@ -15,6 +15,8 @@ router.get("/mine", requireAuth, asyncH(contestController.listMine));
 router.post("/", requireAuth, asyncH(contestController.create));
 router.get("/:id", requireAuth, asyncH(contestController.getContest));
 router.post("/:id/join", requireAuth, asyncH(contestController.join));
+router.post("/:id/accept", requireAuth, asyncH(contestController.accept));
+router.post("/:id/reject", requireAuth, asyncH(contestController.reject));
 router.post("/:id/room", requireAuth, asyncH(contestController.submitRoom));
 router.post("/:id/result", requireAuth, asyncH(contestController.submitResult));
 router.post("/:id/cancel", requireAuth, asyncH(contestController.cancel));

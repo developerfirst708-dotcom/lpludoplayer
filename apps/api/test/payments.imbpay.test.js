@@ -440,12 +440,12 @@ test("threshold rules: gateway below ₹5000, manual at/above", async () => {
 
   // manual refuses ₹4999 while the gateway is healthy
   const manualBelow = await request(app).post("/api/payments/deposit").set(auth(player.token))
-    .send({ amountPaise: 499900, utr: "MANUAL12345" });
+    .send({ amountPaise: 499900, utr: "MANUAL12345", proofImageKey: "seed/deposits/m1.png" });
   assert.equal(manualBelow.status, 400, JSON.stringify(manualBelow.body));
 
   // manual accepts ₹5000 exactly
   const manualAt = await request(app).post("/api/payments/deposit").set(auth(player.token))
-    .send({ amountPaise: 500000, utr: "MANUAL54321" });
+    .send({ amountPaise: 500000, utr: "MANUAL54321", proofImageKey: "seed/deposits/m2.png" });
   assert.equal(manualAt.status, 201, JSON.stringify(manualAt.body));
 
   const row = await DepositRequest.findById(manualAt.body.id).lean();
@@ -494,7 +494,7 @@ test("a refusing gateway opens the breaker and the manual rail takes over", asyn
 
   // …and the manual flow is allowed again for small amounts
   const manual = await request(app).post("/api/payments/deposit").set(auth(player.token))
-    .send({ amountPaise: 50000, utr: "MANUAL99999" });
+    .send({ amountPaise: 50000, utr: "MANUAL99999", proofImageKey: "seed/deposits/m3.png" });
   assert.equal(manual.status, 201, JSON.stringify(manual.body));
 
   const blocked = await createGatewayDeposit(player, 50000);

@@ -75,8 +75,9 @@ test("prize maths: Adda Ludo slab 1 (10% of the stake up to ₹500)", () => {
 
 test("prize maths: Adda Ludo slab 2 (5% of the stake above ₹500)", () => {
   const b = computePrize(55000); // ₹550 entry
-  assert.equal(b.commissionPaise, 2750); // 5% of ₹550 = ₹27.50
-  assert.equal(b.prizePaise, 107250); // ₹1072.50 → same as floor(pool − platformFee)
+  // reference parity: the PRIZE is floored to whole rupees, the house keeps the remainder
+  assert.equal(b.prizePaise, 107200); // ₹1072
+  assert.equal(b.commissionPaise, 2800); // ₹28 (pool 110000 − 107200)
   assert.equal(b.commissionBps, COMMISSION_BPS_SLAB_2);
 
   const k = computePrize(100000); // ₹1,000 entry

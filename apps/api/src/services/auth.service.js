@@ -5,7 +5,7 @@ import { Wallet } from "../db/models/wallet.model.js";
 import { withTransaction } from "../db/connect.js";
 import { env } from "../config/env.js";
 import { log } from "../config/logger.js";
-import { UnauthorizedError, NotFoundError, ForbiddenError } from "@lpludo/shared";
+import { UnauthorizedError, NotFoundError, ForbiddenError, BadRequestError } from "@lpludo/shared";
 
 const l = log("auth");
 
@@ -90,9 +90,11 @@ export async function upsertPlayer({ phone, referralCode }) {
     if (!user) {
       user = new User({ phone, name: await generateUniquePlayerName({ session }), role: "player" });
       user.referral.code = makeReferralCode();
+      // an unknown referral code is an error, not a silent no-op (reference rule)
       if (referralCode) {
-        const referrer = await User.findOne({ "referral.code": referralCode }).session(session);
-        if (referrer) user.referral.referredBy = referrer._id;
+        const referrer = await User.findOne({ "referral.code": referralCode }).session(session).select("_id");
+        if (!referrer) throw new BadRequestError("Invalid referral code");
+        user.referral.referredBy = referrer._id;
       }
       await user.save({ session });
       l.info({ userId: String(user._id), name: user.name }, "player created with auto name");
@@ -108,6 +110,13 @@ export async function upsertPlayer({ phone, referralCode }) {
       }
       await user.save({ session });
     }
+
+    // ONE active session: a fresh login signs every other device out. Bumping
+    // tokenVersion makes all older access AND refresh tokens fail their `tv`
+    // check in requireAuth/refresh (the token is signed AFTER this, so the new
+    // session keeps the bumped value).
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    await user.save({ session });
 
     if (!(await Wallet.findOne({ userId: user._id }).session(session))) {
       await Wallet.create([{ userId: user._id }], { session });

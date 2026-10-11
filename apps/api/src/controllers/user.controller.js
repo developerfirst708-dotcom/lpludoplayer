@@ -14,10 +14,11 @@ import { referralApplySchema } from "../validation/extraSchemas.js";
 /** GET /user/profile — everything the account screen needs in one call (F4) */
 export async function getProfile(req, res) {
   const user = req.user.doc;
-  const [wallet, ledger, battles] = await Promise.all([
+  const [wallet, ledger, battles, wonMatches] = await Promise.all([
     Wallet.findOne({ userId: user._id }).lean(),
     listLedger(user._id, { limit: 5 }),
     Contest.countDocuments({ "players.userId": user._id }),
+    Contest.countDocuments({ winnerUserId: user._id }),
   ]);
 
   res.json({
@@ -31,6 +32,9 @@ export async function getProfile(req, res) {
           totalPaise: wallet.totalPaise,
           heldPaise: wallet.heldPaise,
           availablePaise: wallet.totalPaise - wallet.heldPaise,
+          balancePaise: wallet.totalPaise - wallet.heldPaise - (wallet.bonusPaise || 0) - (wallet.winningsPaise || 0),
+          bonusPaise: wallet.bonusPaise || 0,
+          winningsPaise: wallet.winningsPaise || 0,
           referralPaise: wallet.referralPaise || 0,
           totals: wallet.totals,
         }
@@ -39,6 +43,44 @@ export async function getProfile(req, res) {
       id: r._id, type: r.type, amountPaise: r.amount, note: r.note, createdAt: r.createdAt,
     })),
     battlesPlayed: battles,
+    wonMatches,
+    totalWon: wallet ? (wallet.winningsPaise || 0) : 0,
+  });
+}
+
+/** GET /user/stats — lifetime battle stats (reference shape) */
+export async function getStats(req, res) {
+  const userId = req.user.id;
+  const [totalContests, wonContests, wallet] = await Promise.all([
+    Contest.countDocuments({ "players.userId": userId }),
+    Contest.countDocuments({ winnerUserId: userId }),
+    getOrCreateWallet(userId),
+  ]);
+  res.json({
+    totalContests,
+    wonContests,
+    totalEarnings: wallet?.winningsPaise || 0,
+  });
+}
+
+/** GET /user/referral-history — every referral commission earned, newest first */
+export async function referralHistory(req, res) {
+  const userId = req.user.id;
+  const rows = await LedgerEntry.find({ userId, type: "referral_commission" })
+    .sort({ createdAt: -1 })
+    .limit(200)
+    .lean();
+  const ids = [...new Set(rows.map((r) => String(r.metadata?.referredUserId)).filter(Boolean))];
+  const users = ids.length ? await User.find({ _id: { $in: ids } }).select("name").lean() : [];
+  const nameOf = Object.fromEntries(users.map((u) => [String(u._id), u.name]));
+  res.json({
+    items: rows.map((r) => ({
+      id: r._id,
+      playerName: nameOf[String(r.metadata?.referredUserId)] || "Player",
+      amountPaise: r.referralDelta,
+      balanceAfterPaise: r.balanceAfter,
+      createdAt: r.createdAt,
+    })),
   });
 }
 

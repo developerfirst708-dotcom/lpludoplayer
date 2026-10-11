@@ -52,8 +52,5 @@ export const otpLimiter = makeLimiter({ windowMs: 15 * 60_000, max: 10, keyPrefi
 /** general API: generous but bounded */
 export const apiLimiter = makeLimiter({ windowMs: 60_000, max: 300, keyPrefix: "api", skipFailedRequests: true });
 
-/** admin login: very strict */
-export const adminLoginLimiter = makeLimiter({ windowMs: 15 * 60_000, max: 5, keyPrefix: "adminlogin" });
-
 /** payment-gateway callbacks: per-IP ceiling only, generous enough for retries */
 export const webhookLimiter = makeLimiter({ windowMs: 60_000, max: 120, keyPrefix: "gwcallback" });

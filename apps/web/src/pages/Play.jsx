@@ -15,11 +15,12 @@ import { Button, Empty, SectionTitle, Skeleton } from "../components/ui.jsx";
  *   • Adda guards: one active battle, max 2 searching battles, no duplicate stake
  *
  * Endpoints (verified against contest.routes.js):
- *   GET  /contests/open        open battles
- *   GET  /contests/mine        my battles (all statuses)
- *   POST /contests             { stake } — stake is HELD, not spent
- *   POST /contests/:id/join    second seat (both holds land before play)
- *   POST /contests/:id/cancel  refunds the creator's hold
+ *   GET  /contests/open          open battles
+ *   GET  /contests/mine          my battles (all statuses)
+ *   POST /contests               { stake } — balance checked; nothing locked yet
+ *   POST /contests/:id/join      sends a join request (no money moves)
+ *   POST /contests/:id/accept    creator starts the match — locks BOTH stakes
+ *   POST /contests/:id/cancel    cancels an open/join_requested battle (nothing held)
  */
 
 const MAX_SEARCHING_BATTLES = 2;
@@ -29,47 +30,6 @@ const stake_STEP = 50;
 
 const ACTIVE_STATUSES = ["join_requested", "running", "room_submitted", "result_submitted", "cancel_requested"];
 const RUNNING_STATUSES = ["join_requested", "running", "room_submitted", "result_submitted", "cancel_requested"];
-
-/**
- * Social-proof "running battles" — Adda Ludo ships this list in battle.jsx.
- * They are display-only (isFake → clicking never navigates) and never touch the
- * API. Delete this block to switch the list to real battles only.
- *
- * Real accounts get a random 5-letter handle at login (see
- * apps/api/src/services/auth.service.js), so the stand-ins are generated with
- * the same alphabet/length — they read as genuinely assigned players instead
- * of the old look-alike "Player 145" / "Player 256" counters.
- */
-const NAME_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // I and O omitted (look-alikes)
-const makeFakeName = () => {
-  let out = "";
-  for (let i = 0; i < 5; i++) out += NAME_ALPHABET[Math.floor(Math.random() * NAME_ALPHABET.length)];
-  return out;
-};
-
-const FAKE_BATTLE_stakeS = [
-  1000, 2050, 500, 350, 3500, 450, 150, 500, 100, 1450, 350, 2050, 1900, 600, 2000, 200, 100, 2250, 150, 3500, 5500, 950, 50, 1050,
-];
-
-const FAKE_RUNNING_stakeS = FAKE_BATTLE_stakeS.slice(0, 15);
-
-const FAKE_RUNNING_BATTLES = FAKE_RUNNING_stakeS.map((stake, index) => {
-  const creatorName = makeFakeName();
-  let opponentName = makeFakeName();
-  while (opponentName === creatorName) opponentName = makeFakeName();
-
-  const stakePaise = rupeesToPaise(stake);
-  return {
-    id: `fake_run_${index + 1}`,
-    battleId: `fake_run_${index + 1}`,
-    stake: stakePaise,
-    prize: computePrize(stakePaise).prizePaise,
-    status: "running",
-    isFake: true,
-    createdBy: { name: creatorName },
-    opponent: { name: opponentName },
-  };
-});
 
 const creatorOf = (c) => c?.players?.find((p) => p.seat === 1) || null;
 const opponentOf = (c) => c?.players?.find((p) => p.seat === 2) || null;
@@ -161,7 +121,7 @@ export default function Play() {
       return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
     });
 
-    return [...real, ...FAKE_RUNNING_BATTLES];
+    return real;
   }, [myBattles]);
 
   const previewPaise = useMemo(() => {
@@ -193,7 +153,7 @@ export default function Play() {
       return false;
     }
     if (amt % stake_STEP !== 0) {
-      toast.error(`stake must be in multiples of ₹${stake_STEP}`);
+      toast.error(`Amount must be in multiples of ₹${stake_STEP}`);
       return false;
     }
     return true;
@@ -251,7 +211,36 @@ export default function Play() {
     try {
       setActionLoading(true);
       await api(`/contests/${battleId}/cancel`, { method: "POST" });
-      toast.success("Battle cancelled — stake refunded");
+      toast.success("Battle cancelled — amount refunded");
+      invalidate();
+    } catch (err) {
+      reportError(err);
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  // creator accepts a join request → the match starts (both stakes lock) and we open the room
+  async function acceptBattle(battleId) {
+    try {
+      setActionLoading(true);
+      await api(`/contests/${battleId}/accept`, { method: "POST" });
+      toast.success("Battle started!");
+      invalidate();
+      navigate(`/battle/${battleId}`);
+    } catch (err) {
+      reportError(err);
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  // creator declines a join request → the battle reopens
+  async function rejectBattle(battleId) {
+    try {
+      setActionLoading(true);
+      await api(`/contests/${battleId}/reject`, { method: "POST" });
+      toast.success("Join request declined");
       invalidate();
     } catch (err) {
       reportError(err);
@@ -261,7 +250,9 @@ export default function Play() {
   }
 
   function getOpenAction(c) {
-    if (c.status === "open" && creatorOf(c)?.isYou) {
+    const isCreatorOfBattle = Boolean(creatorOf(c)?.isYou);
+
+    if (c.status === "open" && isCreatorOfBattle) {
       return (
         <Button variant="danger" className="px-4 py-2 text-xs" disabled={actionLoading} onClick={() => cancelBattle(c.id)}>
           Cancel
@@ -279,6 +270,32 @@ export default function Play() {
         >
           PLAY
         </Button>
+      );
+    }
+
+    // someone requested to join — the creator accepts/declines right here
+    if (c.status === "join_requested" && isCreatorOfBattle) {
+      return (
+        <div className="flex items-center gap-1.5">
+          <Button variant="success" className="px-3 py-2 text-xs" disabled={actionLoading} onClick={() => acceptBattle(c.id)}>
+            Accept
+          </Button>
+          <Button variant="danger" className="px-3 py-2 text-xs" disabled={actionLoading} onClick={() => rejectBattle(c.id)}>
+            Decline
+          </Button>
+        </div>
+      );
+    }
+
+    // the joiner waits (and may withdraw the request)
+    if (c.status === "join_requested") {
+      return (
+        <div className="flex items-center gap-1.5">
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-500/30 border-t-brand-500" />
+          <Button variant="danger" className="px-3 py-2 text-xs" disabled={actionLoading} onClick={() => cancelBattle(c.id)}>
+            Cancel
+          </Button>
+        </div>
       );
     }
 
@@ -314,7 +331,7 @@ export default function Play() {
           <input
             type="number"
             inputMode="numeric"
-            placeholder="Enter stake"
+            placeholder="Enter amount"
             className="min-w-0 flex-1 bg-transparent py-2 text-sm font-semibold text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400"
             value={betstake}
             min={MIN_stake}
@@ -369,10 +386,7 @@ export default function Play() {
             <MatchCard
               key={c.id}
               battle={c}
-              onClick={() => {
-                if (c.isFake) return;
-                navigate(`/battle/${c.id}`);
-              }}
+              onClick={() => navigate(`/battle/${c.id}`)}
             />
           ))}
         </div>
@@ -408,10 +422,10 @@ function MatchCard({ battle, onClick }) {
 
   const status = String(battle.status || "").toLowerCase();
   const isPending = status === "result_submitted" || status === "cancel_requested";
-  const mine = !battle.isFake && isMine(battle);
+  const mine = isMine(battle);
 
-  const creatorName = creatorOf(battle)?.name || battle.createdBy?.name || "Player";
-  const opponentName = opponentOf(battle)?.name || battle.opponent?.name || "Opponent";
+  const creatorName = creatorOf(battle)?.name || "Player";
+  const opponentName = opponentOf(battle)?.name || "Opponent";
   const prize = battle.prize ?? computePrize(battle.stake).prizePaise;
 
   return (

@@ -67,6 +67,9 @@ const NAV = [
     ],
   },
   {
+    label: "Dummy Battles", icon: "matches", to: "/dummy-battles", perm: "matches",
+  },
+  {
     label: "Users", icon: "users", to: "/users", perm: "user",
     items: [
       { label: "All Users", to: "/users?filter=all" },
@@ -88,6 +91,7 @@ const NAV = [
   { label: "Withdrawals", icon: "withdraw", to: "/withdrawals", perm: "withdraw" },
   { label: "Ledger", icon: "ledger", to: "/ledger", perm: "ledger" },
   { label: "Audit", icon: "audit", to: "/audit", perm: "audit" },
+  { label: "Client Tracking", icon: "users", to: "/client-tracking", perm: "client_tracking" },
   {
     label: "Settings", icon: "settings", to: "/settings", perm: "setting",
     items: [

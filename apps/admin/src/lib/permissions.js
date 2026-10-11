@@ -14,6 +14,7 @@ export const PERMISSIONS = [
   { key: "ledger", label: "Ledger" },
   { key: "audit", label: "Audit" },
   { key: "setting", label: "Settings" },
+  { key: "client_tracking", label: "Client Tracking" },
 ];
 
 export function isFullAdmin(admin) {

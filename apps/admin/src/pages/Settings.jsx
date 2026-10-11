@@ -69,9 +69,11 @@ function PlatformSettings({ isSuperadmin, qc, toast }) {
   useEffect(() => {
     if (settings.data) {
       setForm({
+        websiteName: settings.data.websiteName || "",
         depositUpiId: settings.data.depositUpiId || "",
         depositUpiName: settings.data.depositUpiName || "",
         depositMin: toRupees(settings.data.depositMinPaise),
+        depositMax: toRupees(settings.data.depositMaxPaise),
         withdrawalMin: toRupees(settings.data.withdrawalMinPaise),
         gatewayMax: toRupees(settings.data.depositGatewayMaxPaise),
         maintenanceMode: Boolean(settings.data.maintenanceMode),
@@ -83,8 +85,10 @@ function PlatformSettings({ isSuperadmin, qc, toast }) {
   const save = useMutation({
     mutationFn: () => {
       const body = {
+        websiteName: form.websiteName.trim() || undefined,
         depositUpiName: form.depositUpiName.trim() || undefined,
         depositMinPaise: form.depositMin ? rupeesToPaise(form.depositMin) : undefined,
+        depositMaxPaise: form.depositMax ? rupeesToPaise(form.depositMax) : undefined,
         withdrawalMinPaise: form.withdrawalMin ? rupeesToPaise(form.withdrawalMin) : undefined,
         depositGatewayMaxPaise: form.gatewayMax ? rupeesToPaise(form.gatewayMax) : undefined,
         maintenanceMode: form.maintenanceMode,
@@ -123,6 +127,12 @@ function PlatformSettings({ isSuperadmin, qc, toast }) {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <Panel title="Website">
+          <div className="space-y-3">
+            <Input label="Website name" value={form.websiteName} onChange={(e) => set({ websiteName: e.target.value })} placeholder="LPLUDO" disabled={!isSuperadmin} hint="Brand name shown to players." />
+          </div>
+        </Panel>
+
         <Panel title="Deposit account">
           <div className="space-y-3">
             <Input label="UPI ID" value={form.depositUpiId} onChange={(e) => set({ depositUpiId: e.target.value })} placeholder="lpludo@upi" disabled={!isSuperadmin} />
@@ -135,9 +145,10 @@ function PlatformSettings({ isSuperadmin, qc, toast }) {
 
         <Panel title="Limits & mode">
           <div className="space-y-3">
-            <Input label="Minimum deposit (₹)" value={form.depositMin} onChange={(e) => set({ depositMin: e.target.value })} placeholder="10.00" inputMode="decimal" disabled={!isSuperadmin} hint={settings.data?.depositMinPaise ? `currently ${formatPaise(settings.data.depositMinPaise)}` : undefined} />
+            <Input label="Minimum deposit (₹)" value={form.depositMin} onChange={(e) => set({ depositMin: e.target.value })} placeholder="100.00" inputMode="decimal" disabled={!isSuperadmin} hint={settings.data?.depositMinPaise ? `currently ${formatPaise(settings.data.depositMinPaise)}` : undefined} />
+            <Input label="Maximum deposit (₹)" value={form.depositMax} onChange={(e) => set({ depositMax: e.target.value })} placeholder="100000.00" inputMode="decimal" disabled={!isSuperadmin} hint={settings.data?.depositMaxPaise ? `currently ${formatPaise(settings.data.depositMaxPaise)}` : undefined} />
             <Input label="Instant UPI limit (₹)" value={form.gatewayMax} onChange={(e) => set({ gatewayMax: e.target.value })} placeholder="5000.00" inputMode="decimal" disabled={!isSuperadmin} hint="Amounts below this are paid on the IMB Pay gateway and credited automatically. At or above it, players pay to the UPI ID above and you verify the UTR." />
-            <Input label="Minimum withdrawal (₹)" value={form.withdrawalMin} onChange={(e) => set({ withdrawalMin: e.target.value })} placeholder="300.00" inputMode="decimal" disabled={!isSuperadmin} hint={settings.data?.withdrawalMinPaise ? `currently ${formatPaise(settings.data.withdrawalMinPaise)}` : undefined} />
+            <Input label="Minimum withdrawal (₹)" value={form.withdrawalMin} onChange={(e) => set({ withdrawalMin: e.target.value })} placeholder="200.00" inputMode="decimal" disabled={!isSuperadmin} hint={settings.data?.withdrawalMinPaise ? `currently ${formatPaise(settings.data.withdrawalMinPaise)}` : undefined} />
             <label className={`flex items-center justify-between rounded-xl border border-[#f0c2d8] px-3 py-2.5 ${isSuperadmin ? "" : "opacity-60"}`}>
               <span className="text-sm font-bold text-[#2a1520]">Maintenance mode</span>
               <input type="checkbox" checked={form.maintenanceMode} onChange={(e) => set({ maintenanceMode: e.target.checked })} disabled={!isSuperadmin} className="h-4 w-4 accent-[#db2777]" />

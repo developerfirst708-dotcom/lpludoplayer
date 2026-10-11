@@ -6,13 +6,16 @@ import { DepositRequest } from "../db/models/depositRequest.model.js";
 import { WithdrawalRequest } from "../db/models/withdrawalRequest.model.js";
 import { LedgerEntry } from "../db/models/ledgerEntry.model.js";
 import { AuditLog } from "../db/models/auditLog.model.js";
+import { TrackedAccount } from "../db/models/trackedAccount.model.js";
 import { getSettings } from "../db/models/settings.model.js";
 import { adminLoginSchema, adminSettleSchema, adminReviewSchema } from "@lpludo/shared/schemas";
 import {
   validate, adminUserActionSchema, adminKycReviewSchema, adminSettingsSchema,
-  adminAccountCreateSchema, adminAccountUpdateSchema, adminAdjustmentSchema,
+  adminAccountCreateSchema, adminAccountUpdateSchema, adminAdjustmentSchema, adminDummySchema,
+  trackedAccountSchema,
 } from "../validation/extraSchemas.js";
 import { sanitizePermissions } from "../utils/permissions.js";
+import { setMaintenanceCache } from "../services/maintenance.service.js";
 import * as contestService from "../services/contest.service.js";
 import * as walletService from "../services/wallet.service.js";
 import { checkPassword, hashPassword } from "../services/auth.service.js";
@@ -44,6 +47,10 @@ export async function login(req, res) {
   }
   await checkPassword(user, password);
   if (user.status === "banned") throw new UnauthorizedError("This account is banned");
+
+  // one active session: bumping tokenVersion logs out any earlier admin login
+  user.tokenVersion = (user.tokenVersion || 0) + 1;
+  await user.save();
 
   const tokens = issueTokens(res, user);
   await writeAudit(user._id, "admin.login", "user", user._id, { ip: req.ip });
@@ -178,7 +185,11 @@ export async function listUsers(req, res) {
         id: u._id, name: u.name, phone: u.phone, status: u.status,
         kycStatus: u.kyc?.status || "not_submitted", createdAt: u.createdAt,
         lastActiveAt: u.lastActiveAt || null,
-        wallet: w ? { totalPaise: w.totalPaise, heldPaise: w.heldPaise } : null,
+        wallet: w ? {
+          totalPaise: w.totalPaise, heldPaise: w.heldPaise,
+          balancePaise: w.totalPaise - w.heldPaise - (w.bonusPaise || 0) - (w.winningsPaise || 0),
+          bonusPaise: w.bonusPaise || 0, winningsPaise: w.winningsPaise || 0,
+        } : null,
       };
     }),
     total, page, limit,
@@ -214,6 +225,9 @@ export async function userDetail(req, res) {
       availablePaise: wallet ? wallet.totalPaise - wallet.heldPaise : 0,
       totalPaise: wallet?.totalPaise || 0,
       heldPaise: wallet?.heldPaise || 0,
+      balancePaise: wallet ? wallet.totalPaise - wallet.heldPaise - (wallet.bonusPaise || 0) - (wallet.winningsPaise || 0) : 0,
+      bonusPaise: wallet?.bonusPaise || 0,
+      winningsPaise: wallet?.winningsPaise || 0,
       referralPaise: wallet?.referralPaise || 0,
       wonPaise: wallet?.totals?.wonPaise || 0,
     },
@@ -379,7 +393,8 @@ export async function listWithdrawals(req, res) {
   ]);
   res.json({
     items: items.map((w) => ({
-      id: w._id, amountPaise: w.amountPaise, status: w.status, upiId: w.upiId,
+      id: w._id, amountPaise: w.amountPaise, status: w.status, method: w.method || "upi",
+      upiId: w.upiId || null, bank: w.bank || null,
       user: w.userId ? { id: w.userId._id, name: w.userId.name, phone: w.userId.phone } : null,
       providerRef: w.providerRef || null, rejectReason: w.rejectReason || null,
       createdAt: w.createdAt, paidAt: w.paidAt || null,
@@ -565,12 +580,97 @@ export async function refundContest(req, res) {
 
 /** POST /admin/contests/:id/force-expire — kill an abandoned open battle */
 export async function forceExpire(req, res) {
-  const { contest, walletView, creatorId } = await contestService.expireContestById(req.params.id, "admin");
+  const { contest } = await contestService.expireContestById(req.params.id, "admin");
   await writeAudit(req.user.id, "contest.force_expire", "contest", contest._id, {});
   emitContestUpdate(contest);
-  emitWalletUpdate(creatorId, walletView);
   emitAdminRefresh();
   res.json({ id: contest._id, status: contest.status });
+}
+
+/* ---------------------------- dummy battles --------------------------- */
+
+/** GET /admin/dummy-contests — social-proof battles shown in the lobby */
+export async function listDummy(_req, res) {
+  const items = await contestService.listDummyContests();
+  res.json({
+    items: items.map((c) => ({
+      id: c._id, stake: c.stake, name: c.dummyName || "Player",
+      mobile: c.dummyMobile || null, createdAt: c.createdAt,
+    })),
+  });
+}
+
+/** POST /admin/dummy-contests — add a dummy battle */
+export async function createDummy(req, res) {
+  const data = validate(adminDummySchema, req.body);
+  const contest = await contestService.createDummyContest({ stakePaise: data.stake, name: data.name, mobile: data.mobile });
+  await writeAudit(req.user.id, "dummy.create", "contest", contest._id, { stake: data.stake });
+  emitAdminRefresh();
+  res.status(201).json({ id: contest._id });
+}
+
+/** DELETE /admin/dummy-contests/:id */
+export async function deleteDummy(req, res) {
+  await contestService.deleteDummyContest(req.params.id);
+  await writeAudit(req.user.id, "dummy.delete", "contest", req.params.id, {});
+  emitAdminRefresh();
+  res.json({ ok: true });
+}
+
+/* --------------------------- client tracking -------------------------- */
+
+/** GET /admin/tracked-accounts */
+export async function listTracked(_req, res) {
+  const items = await TrackedAccount.find().sort({ createdAt: -1 }).lean();
+  res.json({
+    items: items.map((t) => ({
+      id: t._id, phone: t.phone, name: t.name || null, note: t.note || null, createdAt: t.createdAt,
+    })),
+  });
+}
+
+/** POST /admin/tracked-accounts */
+export async function addTracked(req, res) {
+  const data = validate(trackedAccountSchema, req.body);
+  const exists = await TrackedAccount.findOne({ phone: data.phone }).lean();
+  if (exists) throw new ConflictError("This number is already tracked");
+  const doc = await TrackedAccount.create({ phone: data.phone, name: data.name, note: data.note, addedBy: req.user.id });
+  await writeAudit(req.user.id, "tracked.add", "user", doc._id, { phone: data.phone });
+  res.status(201).json({ id: doc._id, phone: doc.phone });
+}
+
+/** DELETE /admin/tracked-accounts/:id */
+export async function deleteTracked(req, res) {
+  await TrackedAccount.deleteOne({ _id: req.params.id });
+  await writeAudit(req.user.id, "tracked.delete", "user", req.params.id, {});
+  res.json({ ok: true });
+}
+
+/** GET /admin/tracked-accounts/report — tracked numbers joined to users + battles */
+export async function trackedReport(_req, res) {
+  const tracked = await TrackedAccount.find().lean();
+  const phones = tracked.map((t) => t.phone);
+  const users = phones.length ? await User.find({ phone: { $in: phones } }).select("+phone name status kyc").lean() : [];
+  const byPhone = new Map(users.map((u) => [u.phone, u]));
+  const userIds = users.map((u) => u._id);
+  const contests = userIds.length
+    ? await Contest.find({ "players.userId": { $in: userIds } }).select("status stake players").lean()
+    : [];
+
+  const items = tracked.map((t) => {
+    const u = byPhone.get(t.phone);
+    const mine = u ? contests.filter((c) => c.players.some((p) => String(p.userId) === String(u._id))) : [];
+    return {
+      id: t._id, phone: t.phone, name: t.name || u?.name || null, note: t.note || null,
+      registered: Boolean(u), userId: u?._id || null, status: u?.status || null,
+      totalBattles: mine.length,
+      completedBattles: mine.filter((c) => c.status === "approved").length,
+      cancelledBattles: mine.filter((c) => c.status === "cancelled" || c.status === "expired").length,
+      stakedPaise: mine.reduce((acc, c) => acc + (c.stake || 0), 0),
+      joinedAt: u?.createdAt || null,
+    };
+  });
+  res.json({ items });
 }
 
 /* --------------------------- ledger & audit --------------------------- */
@@ -619,6 +719,7 @@ export async function listAudit(req, res) {
 export async function settingsDetail(_req, res) {
   const s = await getSettings();
   res.json({
+    websiteName: s.websiteName || "",
     depositUpiId: s.depositUpiId || null,
     depositUpiName: s.depositUpiName || null,
     depositMinPaise: s.depositMinPaise,
@@ -635,9 +736,11 @@ export async function settingsDetail(_req, res) {
 export async function updateSettings(req, res) {
   const data = validate(adminSettingsSchema, req.body);
   const s = await getSettings();
+  if (data.websiteName !== undefined) s.websiteName = data.websiteName;
   if (data.depositUpiId !== undefined) s.depositUpiId = data.depositUpiId;
   if (data.depositUpiName !== undefined) s.depositUpiName = data.depositUpiName;
   if (data.depositMinPaise !== undefined) s.depositMinPaise = data.depositMinPaise;
+  if (data.depositMaxPaise !== undefined) s.depositMaxPaise = data.depositMaxPaise;
   if (data.withdrawalMinPaise !== undefined) s.withdrawalMinPaise = data.withdrawalMinPaise;
   if (data.depositGatewayMaxPaise !== undefined) {
     if (data.depositGatewayMaxPaise <= s.depositMinPaise) {
@@ -645,15 +748,22 @@ export async function updateSettings(req, res) {
     }
     s.depositGatewayMaxPaise = data.depositGatewayMaxPaise;
   }
-  if (data.maintenanceMode !== undefined) s.maintenanceMode = data.maintenanceMode;
+  if (data.maintenanceMode !== undefined) {
+    s.maintenanceMode = data.maintenanceMode;
+    setMaintenanceCache(data.maintenanceMode); // take effect on the next request
+  }
   if (data.supportWhatsapp !== undefined) s.supportWhatsapp = data.supportWhatsapp;
   s.updatedBy = req.user.id;
   await s.save();
   await writeAudit(req.user.id, "settings.update", "settings", s._id, data);
   emitAdminRefresh();
   res.json({
+    websiteName: s.websiteName || "",
     depositUpiId: s.depositUpiId,
     depositUpiName: s.depositUpiName,
+    depositMinPaise: s.depositMinPaise,
+    depositMaxPaise: s.depositMaxPaise,
+    withdrawalMinPaise: s.withdrawalMinPaise,
     depositGatewayMaxPaise: s.depositGatewayMaxPaise,
     maintenanceMode: s.maintenanceMode,
     supportWhatsapp: s.supportWhatsapp || "",

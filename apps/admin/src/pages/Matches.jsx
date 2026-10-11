@@ -70,13 +70,13 @@ export default function Matches() {
       method: "POST",
       body: note.trim() ? { note: note.trim() } : {},
     }),
-    onSuccess: () => { toast.success("Both stakes refunded"); invalidateAll(); setNote(""); },
+    onSuccess: () => { toast.success("Both amounts refunded"); invalidateAll(); setNote(""); },
     onError: (err) => toast.error(err.message),
   });
 
   const forceExpire = useMutation({
     mutationFn: () => api(`/admin/contests/${selectedId}/force-expire`, { method: "POST", body: {} }),
-    onSuccess: () => { toast.success("Open battle expired — stake refunded"); invalidateAll(); },
+    onSuccess: () => { toast.success("Open battle expired"); invalidateAll(); },
     onError: (err) => toast.error(err.message),
   });
 
@@ -130,7 +130,7 @@ export default function Matches() {
             <Table
               columns={[
                 { key: "id", label: "Battle", render: (r) => <span className="font-mono text-xs">{shortId(r.id)}</span> },
-                { key: "stake", label: "Stake", render: (r) => <span className="font-bold"><Money paise={r.stake} /></span> },
+                { key: "stake", label: "Amount", render: (r) => <span className="font-bold"><Money paise={r.stake} /></span> },
                 {
                   key: "players",
                   label: "Players",
@@ -185,7 +185,7 @@ export default function Matches() {
             <div className="grid grid-cols-2 gap-x-5 gap-y-1.5 rounded-xl border border-[#f0c2d8] bg-[#fdf1f7] p-3 text-xs sm:grid-cols-3">
               <p><b>Battle:</b> <span className="font-mono">{c.id}</span></p>
               <p className="flex items-center gap-1"><b>Status:</b> <Badge status={c.status} /></p>
-              <p><b>Stake:</b> <Money paise={c.stake} /></p>
+              <p><b>Amount:</b> <Money paise={c.stake} /></p>
               <p><b>Prize:</b> <Money paise={c.settlement?.prizePaise ?? 0} /></p>
               <p><b>Room code:</b> <span className="font-mono">{c.roomCode || "—"}</span></p>
               <p><b>Winner:</b> {c.winner?.name || "—"}</p>
@@ -224,22 +224,29 @@ export default function Matches() {
                         Net for this battle: <Money paise={p.netPaise ?? 0} signed />
                       </p>
                     )}
-                    <p className="mt-2 text-[11px] font-bold uppercase tracking-wide text-[#a56a83]">Proof screenshot</p>
+                    <p className="mt-2 text-[11px] font-bold uppercase tracking-wide text-[#a56a83]">
+                      Proof screenshots{report?.screenshots?.length ? ` (${report.screenshots.length})` : ""}
+                    </p>
                     <div className="mt-1">
                       {report?.screenshots?.length ? (
-                        <div className="flex flex-wrap gap-2">
-                          {report.screenshots.map((shot) => (
-                            <AuthedImage
-                              key={shot.key}
-                              fileKey={shot.key}
-                              alt="match proof"
-                              className="h-24 w-24"
-                              onClick={() => setPreviewKey(shot.key)}
-                            />
-                          ))}
-                        </div>
+                        <>
+                          <div className="flex flex-wrap gap-2">
+                            {report.screenshots.map((shot) => (
+                              <AuthedImage
+                                key={shot.key}
+                                fileKey={shot.key}
+                                alt="match proof"
+                                className="h-28 w-28"
+                                onClick={() => setPreviewKey(shot.key)}
+                              />
+                            ))}
+                          </div>
+                          <p className="mt-1 text-[10px] font-semibold text-[#a56a83]">Click an image to view it full-size.</p>
+                        </>
                       ) : (
-                        <span className="text-xs text-[#a56a83]">—</span>
+                        <span className="text-xs text-[#a56a83]">
+                          {report ? "no screenshot uploaded" : "not reported yet"}
+                        </span>
                       )}
                     </div>
                   </div>

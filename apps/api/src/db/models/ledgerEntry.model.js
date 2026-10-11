@@ -20,6 +20,10 @@ const ledgerEntrySchema = new mongoose.Schema(
     amount: { type: Number, required: true },
     /** signed integer paise — delta applied to wallet.heldPaise (holds/refunds) */
     heldDelta: { type: Number, required: true, default: 0 },
+    /** signed integer paise — delta applied to wallet.bonusPaise (admin bonus spent/credited) */
+    bonusDelta: { type: Number, default: 0 },
+    /** signed integer paise — delta applied to wallet.winningsPaise (prizes / winnings spent) */
+    winningsDelta: { type: Number, default: 0 },
     /** signed integer paise — delta applied to wallet.referralPaise (referral commission / redeem) */
     referralDelta: { type: Number, default: 0 },
     /** running balances AFTER this row (written in the same transaction) */

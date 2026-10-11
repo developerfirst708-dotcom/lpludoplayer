@@ -23,6 +23,7 @@ router.get("/history", requireAuth, apiLimiter, asyncH(async (req, res) => {
   res.json({
     items: rows.slice(0, limit).map((r) => ({
       id: r._id, type: r.type, amountPaise: r.amount, heldDeltaPaise: r.heldDelta,
+      bonusDeltaPaise: r.bonusDelta || 0, winningsDeltaPaise: r.winningsDelta || 0,
       referralDeltaPaise: r.referralDelta || 0,
       balanceAfterPaise: r.balanceAfter, note: r.note, refType: r.refType,
       createdAt: r.createdAt,

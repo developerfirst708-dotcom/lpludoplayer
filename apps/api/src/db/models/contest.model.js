@@ -27,12 +27,19 @@ const contestSchema = new mongoose.Schema(
       },
     ],
 
-    // Ludo King room code — returned only to the two participants
-    roomCode: { type: String, trim: true, select: false },
+    // Ludo King room code — exactly 8 digits, returned only to the two participants
+    roomCode: {
+      type: String,
+      trim: true,
+      select: false,
+      validate: { validator: (v) => !v || /^\d{8}$/.test(v), message: "Room code must be 8 digits" },
+    },
     /** uppercase mirror for case-insensitive participant lookup (schema keeps original case) */
     roomCodeUp: { type: String, trim: true, select: false },
     roomSubmittedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", select: false },
     roomSubmittedAt: { type: Date, select: false },
+    /** when the battle went live (accept) — the reference 120s room window anchor */
+    timerStartedAt: { type: Date },
 
     // result / settlement
     winnerUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -40,7 +47,7 @@ const contestSchema = new mongoose.Schema(
       prizePaise: { type: Number },
       commissionPaise: { type: Number },
       settledAt: { type: Date },
-      settledBy: { type: String, enum: ["system", "admin", "sla"] },
+      settledBy: { type: String, enum: ["system", "admin", "sla", "players"] },
       payoutLedgerId: { type: mongoose.Schema.Types.ObjectId, ref: "LedgerEntry" },
       refundLedgerIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "LedgerEntry" }],
     },
@@ -53,7 +60,13 @@ const contestSchema = new mongoose.Schema(
       autoRefundAt: { type: Date },
     },
 
-    entryHoldReleased: { type: Boolean, default: false },
+    /** true once the creator accepted a join request and both stakes were locked */
+    entryLocked: { type: Boolean, default: false },
+
+    /** admin "social proof" dummy battle — never a real player, never expires */
+    isDummy: { type: Boolean, default: false, index: true },
+    dummyName: { type: String, trim: true },
+    dummyMobile: { type: String, trim: true },
     expiresAt: { type: Date },
     version: { type: Number, default: 0 },
   },

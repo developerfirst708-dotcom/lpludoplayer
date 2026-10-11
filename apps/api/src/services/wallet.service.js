@@ -20,14 +20,34 @@ import { ForbiddenError } from "@lpludo/shared";
 
 function viewOf(wallet) {
   if (!wallet) return null;
+  const bonus = wallet.bonusPaise || 0;
+  const winnings = wallet.winningsPaise || 0;
   return {
     totalPaise: wallet.totalPaise,
     heldPaise: wallet.heldPaise,
     availablePaise: wallet.totalPaise - wallet.heldPaise,
+    balancePaise: wallet.totalPaise - wallet.heldPaise - bonus - winnings,
+    bonusPaise: bonus,
+    winningsPaise: winnings,
     referralPaise: wallet.referralPaise || 0,
     totals: wallet.totals,
     currency: wallet.currency,
   };
+}
+
+/**
+ * How much of `amountPaise` to take from each playable bucket, in the reference
+ * order bonus -> balance -> winnings. `balance` is the derived remainder.
+ */
+function splitByPriority(wallet, amountPaise) {
+  const bonus = wallet.bonusPaise || 0;
+  const winnings = wallet.winningsPaise || 0;
+  const balance = wallet.totalPaise - wallet.heldPaise - bonus - winnings;
+  const fromBonus = Math.min(bonus, amountPaise);
+  const afterBonus = amountPaise - fromBonus;
+  const fromWinnings = Math.min(winnings, afterBonus);
+  const fromBalance = afterBonus - fromWinnings;
+  return { fromBonus, fromBalance, fromWinnings, balance };
 }
 
 /** @returns the wallet document */
@@ -60,29 +80,20 @@ export async function creditDeposit({ userId, depositRequestId, amountPaise, act
   });
 }
 
-/** Hold a battle stake when a player is actually seated. 409 if short of money. */
+/** Hold a battle stake when a player is actually seated. 409 if short of money.
+ *  Money is taken bonus -> balance -> winnings (reference priority). */
 export async function holdEntryFee({ userId, contestId, amountPaise, session }) {
   const run = async (s) => {
-    await getOrCreateWallet(userId, { session: s });
-    const { wallet } = await applyLedger({
-      session: s, userId, amount: 0, heldDelta: amountPaise, type: "entry_fee_hold",
-      refType: "contest", refId: contestId, note: "Stake held for battle",
+    const wallet = await getOrCreateWallet(userId, { session: s });
+    const { fromBonus, fromWinnings } = splitByPriority(wallet, amountPaise);
+    const { wallet: w } = await applyLedger({
+      session: s, userId, amount: 0, heldDelta: amountPaise,
+      bonusDelta: -fromBonus, winningsDelta: -fromWinnings,
+      type: "entry_fee_hold",
+      refType: "contest", refId: contestId, note: "Amount held for battle",
       idempotencyKey: `entry_hold:${contestId}:${userId}`,
     });
-    return viewOf(wallet);
-  };
-  return session ? run(session) : lockedFor(userId, run);
-}
-
-/** Release a hold back to available (unseat / cancel / refund). */
-export async function releaseEntryFee({ userId, contestId, amountPaise, note = "Stake released", session }) {
-  const run = async (s) => {
-    const { wallet } = await applyLedger({
-      session: s, userId, amount: 0, heldDelta: -amountPaise, type: "entry_fee_release",
-      refType: "contest", refId: contestId, note,
-      idempotencyKey: `entry_release:${contestId}:${userId}`,
-    });
-    return viewOf(wallet);
+    return viewOf(w);
   };
   return session ? run(session) : lockedFor(userId, run);
 }
@@ -92,7 +103,7 @@ export async function consumeEntryFee({ userId, contestId, amountPaise, contestR
   const run = async (s) => {
     const { wallet } = await applyLedger({
       session: s, userId, amount: -amountPaise, heldDelta: -amountPaise, type: "entry_fee_paid",
-      refType: "contest", refId: contestId, note: "Stake consumed",
+      refType: "contest", refId: contestId, note: "Amount consumed",
       metadata: contestRef,
       idempotencyKey: `entry_consume:${contestId}:${userId}`,
     });
@@ -102,7 +113,7 @@ export async function consumeEntryFee({ userId, contestId, amountPaise, contestR
 }
 
 /** Refund the hold for cancelled battles. */
-export async function refundEntryFee({ userId, contestId, amountPaise, note = "Battle cancelled — stake refunded", session }) {
+export async function refundEntryFee({ userId, contestId, amountPaise, note = "Battle cancelled — amount refunded", session }) {
   const run = async (s) => {
     const { wallet } = await applyLedger({
       session: s, userId, amount: 0, heldDelta: -amountPaise, type: "entry_fee_refund",
@@ -114,11 +125,11 @@ export async function refundEntryFee({ userId, contestId, amountPaise, note = "B
   return session ? run(session) : lockedFor(userId, run);
 }
 
-/** Pay the winner (idempotent — a retried settle cannot double-pay). */
+/** Pay the winner — prize lands in the winnings bucket. Idempotent. */
 export async function creditPrize({ userId, contestId, amountPaise, settledBy = "system", session }) {
   const run = async (s) => {
     const { wallet } = await applyLedger({
-      session: s, userId, amount: amountPaise, type: "prize_win",
+      session: s, userId, amount: amountPaise, winningsDelta: amountPaise, type: "prize_win",
       refType: "contest", refId: contestId, note: `Prize credited (${settledBy})`,
       idempotencyKey: `prize:${contestId}:${userId}`,
     });
@@ -127,17 +138,32 @@ export async function creditPrize({ userId, contestId, amountPaise, settledBy = 
   return session ? run(session) : lockedFor(userId, run);
 }
 
-/** Withdrawals: hold on request, then pay (hold->gone) or refund (hold->available). */
+/** Withdrawals: only the winnings bucket is withdrawable (reference rule).
+ *  Request moves winnings -> held; pay consumes it; reject returns it to balance. */
 export async function holdWithdrawal({ userId, withdrawalId, amountPaise, session }) {
   const run = async (s) => {
-    const { wallet } = await applyLedger({
-      session: s, userId, amount: 0, heldDelta: amountPaise, type: "withdrawal_hold",
+    const wallet = await getOrCreateWallet(userId, { session: s });
+    if ((wallet.winningsPaise || 0) < amountPaise) {
+      throw new ForbiddenError("You can only withdraw your winnings");
+    }
+    const { wallet: w } = await applyLedger({
+      session: s, userId, amount: 0, heldDelta: amountPaise, winningsDelta: -amountPaise,
+      type: "withdrawal_hold",
       refType: "withdrawal", refId: withdrawalId, note: "Withdrawal requested",
       idempotencyKey: `w_hold:${withdrawalId}`,
     });
-    return viewOf(wallet);
+    return viewOf(w);
   };
   return session ? run(session) : lockedFor(userId, run);
+}
+
+/** Guard used by the withdraw request: only winnings may be cashed out. */
+export async function assertWinnings(userId, amountPaise) {
+  const w = await getOrCreateWallet(userId);
+  if ((w.winningsPaise || 0) < amountPaise) {
+    throw new ForbiddenError("You can only withdraw your winnings");
+  }
+  return true;
 }
 
 export async function payWithdrawal({ userId, withdrawalId, amountPaise, actorId, providerRef, session }) {
@@ -170,7 +196,7 @@ export async function refundWithdrawal({ userId, withdrawalId, amountPaise, acto
 export async function assertAvailable(userId, amountPaise) {
   const w = await getOrCreateWallet(userId);
   if (w.totalPaise - w.heldPaise < amountPaise) {
-    throw new ForbiddenError("Insufficient balance for this stake");
+    throw new ForbiddenError("Insufficient balance for this amount");
   }
   return true;
 }
@@ -203,14 +229,25 @@ export async function creditReferralCommission({ referrerId, referredUserId, con
  */
 export async function adminAdjustment({ userId, amountPaise, kind, note, actorId }) {
   return lockedFor(userId, async (session) => {
-    const { wallet } = await applyLedger({
-      session, userId, amount: amountPaise, type: "adjustment",
+    const wallet = await getOrCreateWallet(userId, { session });
+    let bonusDelta = 0;
+    let winningsDelta = 0;
+    if (kind === "bonus" && amountPaise > 0) {
+      bonusDelta = amountPaise; // a bonus lands in the bonus bucket (spent first)
+    } else if (amountPaise < 0) {
+      // a penalty is taken bonus -> balance -> winnings
+      const { fromBonus, fromWinnings } = splitByPriority(wallet, -amountPaise);
+      bonusDelta = -fromBonus;
+      winningsDelta = -fromWinnings;
+    }
+    const { wallet: w } = await applyLedger({
+      session, userId, amount: amountPaise, bonusDelta, winningsDelta, type: "adjustment",
       refType: "admin", refId: userId,
       note: note || (kind === "bonus" ? "Admin bonus" : "Admin penalty"),
       metadata: { kind },
       idempotencyKey: `adjust:${userId}:${randomUUID()}`, actorId,
     });
-    return viewOf(wallet);
+    return viewOf(w);
   });
 }
 

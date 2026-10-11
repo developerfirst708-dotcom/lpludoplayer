@@ -15,7 +15,7 @@ import mongoose from "mongoose";
 const depositRequestSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    amountPaise: { type: Number, required: true, min: 1000 }, // min ₹10
+    amountPaise: { type: Number, required: true, min: 10000 }, // min ₹100
 
     method: { type: String, enum: ["manual", "gateway"], default: "manual", index: true },
 

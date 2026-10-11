@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { api } from "../lib/api.js";
+import { api, apiUpload } from "../lib/api.js";
+import compressImage from "../lib/compressImage.js";
 import { socket } from "../lib/socket.js";
 import { rupeesToPaise, formatPaise } from "@lpludo/shared";
 import { useToast } from "../components/Toast.jsx";
@@ -54,6 +55,10 @@ export default function Wallet() {
   const [amount, setAmount] = useState("");
   const [utr, setUtr] = useState("");
   const [upiId, setUpiId] = useState("");
+  const [proof, setProof] = useState(null);
+  const [proofName, setProofName] = useState("");
+  const [method, setMethod] = useState("upi"); // withdraw rail: upi | bank
+  const [bank, setBank] = useState({ accountName: "", accountNumber: "", ifsc: "" });
   const [busy, setBusy] = useState(false);
 
   const wallet = useQuery({ queryKey: ["wallet"], queryFn: () => api("/wallet") });
@@ -137,10 +142,18 @@ export default function Wallet() {
       return;
     }
 
+    if (!proof) {
+      toast.error("Upload the payment screenshot");
+      return;
+    }
+
     setBusy(true);
     try {
-      await api("/payments/deposit", { method: "POST", body: { amountPaise: paise, utr: utr.trim() } });
-      
+      // upload the proof first, then claim with its key (key is required server-side)
+      const compressed = await compressImage(proof);
+      const { key } = await apiUpload("/uploads", compressed, "deposit");
+      await api("/payments/deposit", { method: "POST", body: { amountPaise: paise, utr: utr.trim(), proofImageKey: key } });
+
       toast.success("Deposit submitted. Wait for admin approval.");
 
       triggerDepositNotification(
@@ -150,12 +163,20 @@ export default function Wallet() {
 
       setAmount("");
       setUtr("");
+      setProof(null);
+      setProofName("");
       await refreshAll();
     } catch (err) {
       toast.error(err.message);
     } finally {
       setBusy(false);
     }
+  }
+
+  function pickProof(file) {
+    if (!file) return;
+    setProof(file);
+    setProofName(file.name);
   }
 
   /**
@@ -202,9 +223,31 @@ export default function Wallet() {
   async function submitWithdraw() {
     const paise = toPaise(amount);
     if (paise === null) return;
+
+    // > ₹2000 must go to a bank account (reference rule)
+    const bankRequired = paise > 200000;
+    const finalMethod = bankRequired ? "bank" : method;
+    const body = { amountPaise: paise, method: finalMethod };
+
+    if (finalMethod === "upi") {
+      if (!upiId.trim()) { toast.error("Enter your UPI ID"); return; }
+      body.upiId = upiId.trim();
+    } else {
+      const b = {
+        accountName: bank.accountName.trim(),
+        accountNumber: bank.accountNumber.trim(),
+        ifsc: bank.ifsc.trim().toUpperCase(),
+      };
+      if (!b.accountName || !/^\d{6,20}$/.test(b.accountNumber) || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(b.ifsc)) {
+        toast.error("Enter valid bank details");
+        return;
+      }
+      body.bank = b;
+    }
+
     setBusy(true);
     try {
-      await api("/payments/withdraw", { method: "POST", body: { amountPaise: paise, upiId: upiId.trim() } });
+      await api("/payments/withdraw", { method: "POST", body });
       toast.success("Withdrawal requested");
       setAmount("");
       await refreshAll();
@@ -248,6 +291,12 @@ export default function Wallet() {
 
   // Filter history to display ONLY deposits and withdrawals
   const filteredHistory = (history.data?.items || []).filter((item) => DISPLAY_TYPES.includes(item.type));
+
+  // withdraw rail: only winnings are withdrawable; > ₹2000 must be a bank transfer
+  const winningsPaise = wallet.data?.winningsPaise ?? 0;
+  const withdrawPaise = safePaise(amount);
+  const bankRequired = withdrawPaise !== null && withdrawPaise > 200000;
+  const effectiveMethod = bankRequired ? "bank" : method;
 
   return (
     <div className="space-y-4">
@@ -349,16 +398,34 @@ export default function Wallet() {
                     onChange={(e) => setUtr(e.target.value.toUpperCase())}
                     placeholder="XXXXXXXXXXXX"
                   />
+
+                  {/* payment screenshot — required (admin verifies it) */}
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-white p-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Payment screenshot (required)</p>
+                      <p className="truncate text-xs font-bold text-slate-700">{proofName || "No file chosen"}</p>
+                    </div>
+                    <label className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-gray-100 px-4 py-2 text-xs font-extrabold text-slate-700 transition-all hover:bg-gray-200 active:scale-95">
+                      {proof ? "Replace" : "Upload"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="sr-only"
+                        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; pickProof(f); }}
+                      />
+                    </label>
+                  </div>
+
                   <Button
                     className="w-full"
                     onClick={submitDeposit}
                     loading={busy}
-                    disabled={!amount || utr.trim().length < 6}
+                    disabled={!amount || utr.trim().length < 6 || !proof}
                   >
                     Submit deposit
                   </Button>
                   <p className="text-[11px] text-slate-600">
-                    Pay the exact amount (multiple of ₹50) to the UPI ID above, then submit the UTR. An admin verifies and credits your wallet.
+                    Pay the exact amount (multiple of ₹50) to the UPI ID above, then attach the payment screenshot and submit the UTR. An admin verifies and credits your wallet.
                   </p>
                 </div>
               )}
@@ -370,24 +437,74 @@ export default function Wallet() {
           <Panel title="Withdraw funds" className="border-amber-200 bg-amber-50/70">
             {kycVerified ? (
               <div className="space-y-3">
+                {/* money buckets — only winnings are withdrawable */}
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <Bucket label="Balance" paise={wallet.data?.balancePaise} />
+                  <Bucket label="Bonus" paise={wallet.data?.bonusPaise} />
+                  <Bucket label="Winnings" paise={wallet.data?.winningsPaise} highlight />
+                </div>
+                <p className="text-[11px] font-bold text-emerald-700">
+                  Withdrawable (winnings): {formatPaise(winningsPaise)}
+                </p>
+
                 <Input
                   label="Amount (₹)"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  placeholder="300"
+                  placeholder="200"
                   inputMode="decimal"
-                  hint="Minimum withdrawal ₹300"
+                  hint="Minimum ₹200 · up to ₹2000 via UPI"
                 />
-                <Input
-                  label="Your UPI ID"
-                  value={upiId}
-                  onChange={(e) => setUpiId(e.target.value)}
-                  placeholder="Enter your UPI "
-                />
-                <Button className="w-full" onClick={submitWithdraw} loading={busy} disabled={!amount || !upiId.trim()}>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={bankRequired}
+                    onClick={() => setMethod("upi")}
+                    className={`flex-1 rounded-xl border py-2 text-xs font-bold transition-colors disabled:opacity-50 ${
+                      effectiveMethod === "upi" ? "border-slate-800 bg-white text-slate-900" : "border-amber-200 bg-white/60 text-slate-500"
+                    }`}
+                  >
+                    UPI
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMethod("bank")}
+                    className={`flex-1 rounded-xl border py-2 text-xs font-bold transition-colors ${
+                      effectiveMethod === "bank" ? "border-slate-800 bg-white text-slate-900" : "border-amber-200 bg-white/60 text-slate-500"
+                    }`}
+                  >
+                    Bank
+                  </button>
+                </div>
+
+                {effectiveMethod === "upi" ? (
+                  <Input
+                    label="Your UPI ID"
+                    value={upiId}
+                    onChange={(e) => setUpiId(e.target.value)}
+                    placeholder="name@bank"
+                  />
+                ) : (
+                  <>
+                    <Input label="Account holder name" value={bank.accountName} onChange={(e) => setBank({ ...bank, accountName: e.target.value })} placeholder="Full name" />
+                    <Input label="Account number" value={bank.accountNumber} inputMode="numeric" onChange={(e) => setBank({ ...bank, accountNumber: e.target.value.replace(/\D/g, "") })} placeholder="Account number" />
+                    <Input label="IFSC code" value={bank.ifsc} onChange={(e) => setBank({ ...bank, ifsc: e.target.value.toUpperCase() })} placeholder="ABCD0123456" />
+                  </>
+                )}
+
+                <Button
+                  className="w-full"
+                  onClick={submitWithdraw}
+                  loading={busy}
+                  disabled={!amount || (effectiveMethod === "upi" ? !upiId.trim() : !(bank.accountName && bank.accountNumber && bank.ifsc))}
+                >
                   Request withdrawal
                 </Button>
-                <p className="text-[11px] text-slate-600">The amount is put on hold immediately and paid out by an admin.</p>
+                <p className="text-[11px] text-slate-600">
+                  Only winnings can be withdrawn. Above ₹2000 a bank transfer is required. The amount is put on hold
+                  immediately and paid out by an admin.
+                </p>
               </div>
             ) : (
               <Empty title="KYC required" hint="Open KYC Verification from your Profile to unlock withdrawals." />
@@ -424,6 +541,16 @@ export default function Wallet() {
           </Panel>
         </TabsPanel>
       </Tabs>
+    </div>
+  );
+}
+
+/** small read-only bucket chip (Balance / Bonus / Winnings) */
+function Bucket({ label, paise, highlight }) {
+  return (
+    <div className={`rounded-xl border px-2 py-2 ${highlight ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-white"}`}>
+      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-sm font-black text-slate-800">{formatPaise(paise ?? 0, { withSymbol: false })}</p>
     </div>
   );
 }

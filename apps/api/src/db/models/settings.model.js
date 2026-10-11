@@ -8,11 +8,12 @@ import mongoose from "mongoose";
 const settingsSchema = new mongoose.Schema(
   {
     key: { type: String, required: true, unique: true, default: "global" },
+    websiteName: { type: String, trim: true, default: "LPLUDO" },
     depositUpiId: { type: String, trim: true },
     depositUpiName: { type: String, trim: true },
-    depositMinPaise: { type: Number, default: 1000 },   // ₹10
-    depositMaxPaise: { type: Number, default: 5000000 }, // ₹50,000
-    withdrawalMinPaise: { type: Number, default: 30000 }, // ₹300
+    depositMinPaise: { type: Number, default: 10000 },   // ₹100
+    depositMaxPaise: { type: Number, default: 10000000 }, // ₹1,00,000
+    withdrawalMinPaise: { type: Number, default: 20000 }, // ₹200
     /**
      * Hybrid deposits: amounts BELOW this go through the IMB Pay gateway
      * (auto-verified), amounts at/above it use the manual UPI + UTR flow.
@@ -34,19 +35,19 @@ const settingsSchema = new mongoose.Schema(
 export const Settings = mongoose.model("Settings", settingsSchema);
 
 /**
- * The withdrawal minimum default moved from ₹1,000 to ₹300 after launch. The
- * singleton settings doc on existing installs still carries the old value, so
- * upgrade it in place — but only while it holds that exact legacy default, so a
- * deliberately configured admin value is never overwritten.
+ * The withdrawal minimum default moved ₹1,000 -> ₹300 -> ₹200 over time. Existing
+ * installs still carry an old value, so upgrade it in place — but only while it
+ * holds one of those exact legacy defaults, so a deliberately configured admin
+ * value is never overwritten.
  */
-const LEGACY_WITHDRAWAL_MIN_PAISE = 100000; // old ₹1,000 default
-const DEFAULT_WITHDRAWAL_MIN_PAISE = 30000; // new ₹300 default
+const LEGACY_WITHDRAWAL_MIN_PAISE = [100000, 30000]; // old ₹1,000 / ₹300 defaults
+const DEFAULT_WITHDRAWAL_MIN_PAISE = 20000; // new ₹200 default
 
 export async function getSettings() {
   let doc = await Settings.findOne({ key: "global" });
   if (!doc) {
     doc = await Settings.create({ key: "global" });
-  } else if (doc.withdrawalMinPaise === LEGACY_WITHDRAWAL_MIN_PAISE) {
+  } else if (LEGACY_WITHDRAWAL_MIN_PAISE.includes(doc.withdrawalMinPaise)) {
     doc.withdrawalMinPaise = DEFAULT_WITHDRAWAL_MIN_PAISE;
     await doc.save();
   }

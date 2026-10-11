@@ -11,6 +11,8 @@ import Kyc from "./pages/Kyc.jsx";
 import Deposits from "./pages/Deposits.jsx";
 import Withdrawals from "./pages/Withdrawals.jsx";
 import Matches from "./pages/Matches.jsx";
+import DummyBattles from "./pages/DummyBattles.jsx";
+import ClientTracking from "./pages/ClientTracking.jsx";
 import Ledger from "./pages/Ledger.jsx";
 import Audit from "./pages/Audit.jsx";
 import Settings from "./pages/Settings.jsx";
@@ -50,6 +52,8 @@ function AdminApp() {
       <Route path="/login" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={withShell(<Dashboard />)} />
       <Route path="/matches" element={withShell(<Matches />)} />
+      <Route path="/dummy-battles" element={withShell(<DummyBattles />)} />
+      <Route path="/client-tracking" element={withShell(<ClientTracking />)} />
       <Route path="/users" element={withShell(<Users />)} />
       <Route path="/kyc" element={withShell(<Kyc />)} />
       <Route path="/deposits" element={withShell(<Deposits />)} />

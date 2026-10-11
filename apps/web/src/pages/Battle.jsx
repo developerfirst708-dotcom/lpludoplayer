@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, apiUpload } from "../lib/api.js";
 import compressImage from "../lib/compressImage.js";
@@ -8,9 +8,6 @@ import { formatPaise } from "@lpludo/shared";
 import { useToast } from "../components/Toast.jsx";
 import { Button, Empty, Input, Panel, Skeleton, StatusBadge } from "../components/ui.jsx";
 
-/** statuses that belong in the lobby's "Running Battles" list */
-const RUNNING_STATUSES = ["join_requested", "running", "room_submitted", "result_submitted", "cancel_requested"];
-
 export default function Battle() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -18,7 +15,6 @@ export default function Battle() {
   const qc = useQueryClient();
 
   // State Management
-  const [betAmount, setBetAmount] = useState("");
   const [roomCode, setRoomCode] = useState("");
   const [busy, setBusy] = useState(null); // "create" | "join" | "room" | "result" | "cancel"
   const [reported, setReported] = useState(null);
@@ -32,26 +28,7 @@ export default function Battle() {
   /*                              API QUERIES                                   */
   /* -------------------------------------------------------------------------- */
 
-  // 1. Fetch Open Battles (Active when in Lobby View)
-  const openContestsQuery = useQuery({
-    queryKey: ["contests", "open"],
-    queryFn: () => api("/contests/open").then((r) => r.items || []),
-    enabled: !id,
-    refetchInterval: 10_000,
-  });
-
-  // 2. Fetch Running Battles (Active when in Lobby View)
-  const runningContestsQuery = useQuery({
-    queryKey: ["contests", "running"],
-    queryFn: () =>
-      api("/contests/mine").then((r) =>
-        (r.items || []).filter((c) => RUNNING_STATUSES.includes(c.status))
-      ),
-    enabled: !id,
-    refetchInterval: 10_000,
-  });
-
-  // 3. Fetch Single Contest Details (Active when in Room View with ID)
+  // Fetch Single Contest Details for the room view
   const contestQuery = useQuery({
     queryKey: ["contest", id],
     queryFn: () => api(`/contests/${id}`).then((r) => r.contest),
@@ -125,30 +102,7 @@ export default function Battle() {
     }
   }
 
-  // Create Battle Action
-  const handleCreate = () => {
-    const amt = Number(betAmount);
-    if (!amt || amt < 50) return toast.error("Min battle amount is ₹50");
-    if (amt > 100000) return toast.error("Max battle amount is ₹100,000");
-    if (amt % 50 !== 0) return toast.error("Amount must be in multiples of ₹50");
-
-    return run(
-      "create",
-      async () => {
-        const data = await api("/contests", {
-          method: "POST",
-          body: { stake: amt * 100 }, // Converted to paise for Backend API
-        });
-        setBetAmount("");
-        if (data?.contest?.id) {
-          navigate(`/battle/${data.contest.id}`);
-        }
-      },
-      "Battle created successfully!"
-    );
-  };
-
-  // Join Battle Action
+  // Join Battle Action (sends a join request — no amount is locked yet)
   const join = (targetId = id) =>
     run(
       "join",
@@ -156,7 +110,23 @@ export default function Battle() {
         await api(`/contests/${targetId}/join`, { method: "POST" });
         if (targetId !== id) navigate(`/battle/${targetId}`);
       },
-      "You joined the battle!"
+      "Join request sent — waiting for the creator to accept"
+    );
+
+  // Accept Join Request Action (creator starts the match; both stakes lock here)
+  const accept = (targetId = id) =>
+    run(
+      "accept",
+      () => api(`/contests/${targetId}/accept`, { method: "POST" }),
+      "Battle started!"
+    );
+
+  // Reject Join Request Action (creator declines — the battle reopens)
+  const rejectJoin = (targetId = id) =>
+    run(
+      "reject",
+      () => api(`/contests/${targetId}/reject`, { method: "POST" }),
+      "Join request declined"
     );
 
   // Submit Room Code Action
@@ -202,7 +172,7 @@ export default function Battle() {
     run(
       "cancel",
       () => api(`/contests/${targetId}/cancel`, { method: "POST" }),
-      "Battle cancelled & stake refunded"
+      "Battle cancelled — amount refunded"
     );
 
   function pickScreenshot(file) {
@@ -229,10 +199,14 @@ export default function Battle() {
 
     const me = c.players?.find((p) => p.isYou);
     const inBattle = Boolean(me);
+    const isCreator = Boolean(c.players?.find((p) => p.seat === 1)?.isYou);
     const bothSeated = (c.players?.length || 0) === 2;
     const isTerminal = ["approved", "cancelled", "expired"].includes(c.status);
     const winner = c.winnerUserId ? c.players?.find((p) => String(p.userId) === String(c.winnerUserId)) : null;
     const youWon = Boolean(winner && winner.isYou);
+    // has THIS player already filed their result? (the other player may still submit)
+    const myReport = Boolean((c.resultReports || []).some((r) => String(r.userId) === String(me?.userId)));
+    const resultOpen = ["running", "room_submitted", "result_submitted", "cancel_requested"].includes(c.status);
 
     return (
       <div className="max-w-md mx-auto p-4 space-y-4 text-slate-950">
@@ -273,12 +247,12 @@ export default function Battle() {
         )}
         {c.status === "cancelled" && (
           <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-sm font-bold text-slate-600">
-            Battle cancelled — stakes refunded.
+            Battle cancelled — amounts refunded.
           </div>
         )}
         {c.status === "expired" && (
           <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-sm font-bold text-slate-600">
-            Battle expired — stake refunded.
+            Battle expired — amount refunded.
           </div>
         )}
         {c.status === "cancel_requested" && (
@@ -298,21 +272,44 @@ export default function Battle() {
             {inBattle ? (
               <div className="space-y-3">
                 <p className="rounded-xl bg-indigo-50 px-3 py-2.5 text-xs font-bold text-indigo-700">
-                  Your stake is on hold. Share the battle link — it stays open for 10 minutes.
+                  No amount is deducted yet. Your {formatPaise(c.stake)} is locked only when you accept an opponent.
                 </p>
                 <Button variant="ghost" className="w-full text-rose-600 font-bold" onClick={() => cancelBattle(c.id)} loading={busy === "cancel"}>
-                  Cancel Battle & Refund
+                  Cancel Battle
                 </Button>
               </div>
             ) : (
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-slate-500">
-                  Joining puts {formatPaise(c.stake)} on hold until settlement.
+                  Joining sends a request — {formatPaise(c.stake)} is only locked once the creator accepts.
                 </p>
                 <Button className="w-full bg-emerald-600 text-white font-bold" onClick={() => join(c.id)} loading={busy === "join"}>
                   Join for {formatPaise(c.stake)}
                 </Button>
               </div>
+            )}
+          </Panel>
+        )}
+
+        {/* Join request — the creator accepts to start (and lock both stakes) */}
+        {c.status === "join_requested" && (
+          <Panel title={isCreator ? "Opponent Found" : "Join Requested"}>
+            {isCreator ? (
+              <div className="space-y-3">
+                <p className="rounded-xl bg-indigo-50 px-3 py-2.5 text-xs font-bold text-indigo-700">
+                  Accept to start the match — both players' {formatPaise(c.stake)} amount is locked at that moment.
+                </p>
+                <Button className="w-full bg-emerald-600 text-white font-bold" onClick={() => accept(c.id)} loading={busy === "accept"} disabled={busy === "accept"}>
+                  Accept &amp; Start
+                </Button>
+                <Button variant="ghost" className="w-full text-rose-600 font-bold" onClick={() => rejectJoin(c.id)} loading={busy === "reject"}>
+                  Decline
+                </Button>
+              </div>
+            ) : (
+              <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-xs font-bold text-amber-700">
+                Waiting for the creator to accept…
+              </p>
             )}
           </Panel>
         )}
@@ -355,24 +352,31 @@ export default function Battle() {
                   Copy Code
                 </Button>
               </div>
-            ) : (
+            ) : isCreator ? (
               <div className="space-y-2">
                 <Input
                   label="Enter Room Code from Ludo King"
                   value={roomCode}
-                  onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. 01234567"
+                  onChange={(e) => setRoomCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                  placeholder="8-digit code"
+                  inputMode="numeric"
+                  maxLength={8}
                 />
-                <Button className="w-full" onClick={submitRoom} loading={busy === "room"} disabled={!roomCode.trim()}>
+                <Button className="w-full" onClick={submitRoom} loading={busy === "room"} disabled={roomCode.length !== 8}>
                   Share Room Code
                 </Button>
               </div>
+            ) : (
+              <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-xs font-bold text-amber-700">
+                Waiting for the creator to share the room code…
+              </p>
             )}
           </Panel>
         )}
 
-        {/* Result Submission Section */}
-        {(c.status === "running" || c.status === "room_submitted") && inBattle && (
+        {/* Result Submission — any player who hasn't filed yet can submit, even
+            after the opponent already did (status result_submitted / cancel_requested) */}
+        {inBattle && !myReport && resultOpen && (
           <Panel title="Report Match Result">
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-2">
@@ -436,6 +440,13 @@ export default function Battle() {
           </Panel>
         )}
 
+        {/* already filed — waiting on the opponent / admin */}
+        {inBattle && myReport && resultOpen && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-sm font-bold text-amber-700">
+            Your result is submitted — waiting for the other player / admin.
+          </div>
+        )}
+
         {/* Back Link */}
         <div className="text-center pt-2">
           <button type="button" onClick={() => navigate("/battle")} className="text-xs font-extrabold text-slate-500 hover:underline">
@@ -446,108 +457,6 @@ export default function Battle() {
     );
   }
 
-  /* -------------------------------------------------------------------------- */
-  /*                 2. LOBBY / BATTLES LIST VIEW (Main Route)                   */
-  /* -------------------------------------------------------------------------- */
-  const openContests = openContestsQuery.data || [];
-  const runningContests = runningContestsQuery.data || [];
-
-  return (
-    <div className="min-h-screen bg-[#eef3ff] px-3 pb-28 pt-6 text-slate-950">
-      <div className="mx-auto max-w-md space-y-4">
-        {/* LPLudo Notice Header */}
-        <div className="text-[11px] leading-relaxed text-white px-4 py-3 rounded-xl bg-black shadow-md">
-          LPLUDO में आपका स्वागत है, सबसे Fast ⏩ विथड्रॉ है, 👉 मात्र 2-3 Min में। LPLUDO का APP आ गया है; आप इसे Download कर सकते हैं! 🙏
-        </div>
-
-        <h2 className="text-center text-base font-black uppercase text-slate-800">Create Battle</h2>
-
-        {/* Create Input Box */}
-        <div className="mx-2 rounded-[50px] bg-white p-2 shadow-md ring-1 ring-slate-200 flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-sm font-bold">₹</div>
-          <input
-            type="number"
-            placeholder="Enter Amount (e.g. 50, 100)"
-            className="min-w-0 flex-1 bg-transparent py-2 text-sm font-bold outline-none"
-            value={betAmount}
-            onChange={(e) => setBetAmount(e.target.value)}
-          />
-          <button
-            disabled={busy === "create"}
-            onClick={handleCreate}
-            className="rounded-full bg-slate-900 px-5 py-2 text-xs font-black text-white active:scale-95 disabled:opacity-60"
-          >
-            {busy === "create" ? "..." : "Set"}
-          </button>
-        </div>
-
-        {/* Open Battles Section */}
-        <div className="space-y-2 pt-2">
-          <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-1">
-            Open Battles ⚔️
-          </h3>
-
-          {openContestsQuery.isLoading ? (
-            <Skeleton className="h-16 w-full rounded-xl" />
-          ) : openContests.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-6 text-center text-xs font-black text-slate-400">
-              NO OPEN BATTLES AVAILABLE
-            </div>
-          ) : (
-            openContests.map((b) => (
-              <div key={b.id} className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200 p-3 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">Entry Fee</p>
-                  <p className="text-sm font-black text-slate-800">{formatPaise(b.stake)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">Prize Pool</p>
-                  <p className="text-sm font-black text-emerald-600">{formatPaise(b.prize)}</p>
-                </div>
-                <button
-                  disabled={busy === "join"}
-                  onClick={() => join(b.id)}
-                  className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black text-white active:scale-95 disabled:opacity-50"
-                >
-                  PLAY
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Running Battles Section */}
-        <div className="space-y-2 pt-2">
-          <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-1">
-            Running Battles ⚔️
-          </h3>
-
-          {runningContestsQuery.isLoading ? (
-            <Skeleton className="h-16 w-full rounded-xl" />
-          ) : runningContests.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-6 text-center text-xs font-black text-slate-400">
-              NO RUNNING BATTLES
-            </div>
-          ) : (
-            runningContests.map((b) => (
-              <div key={b.id} className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200 p-3 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">
-                    {b.players?.[0]?.name || "Player 1"} vs {b.players?.[1]?.name || "Player 2"}
-                  </p>
-                  <p className="text-xs font-black text-slate-800">Prize: {formatPaise(b.prize)}</p>
-                </div>
-                <button
-                  onClick={() => navigate(`/battle/${b.id}`)}
-                  className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm"
-                >
-                  VIEW
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  // No :id → the bare /battle route was removed (App redirects /battle → /play).
+  return <Navigate to="/play" replace />;
 }

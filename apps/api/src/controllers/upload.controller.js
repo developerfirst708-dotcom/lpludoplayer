@@ -31,8 +31,8 @@ export async function uploadFile(req, res) {
   if (!sniffed || sniffed !== mimetype) throw new BadRequestError("File content does not match its type");
 
   const ext = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" }[sniffed];
-  const kind = String(req.query.kind || "battle"); // battle | kyc
-  if (!["battle", "kyc"].includes(kind)) throw new BadRequestError("Unknown upload kind");
+  const kind = String(req.query.kind || "battle"); // battle | kyc | deposit
+  if (!["battle", "kyc", "deposit"].includes(kind)) throw new BadRequestError("Unknown upload kind");
 
   const userId = req.user.id;
   const key = `${userId}/${kind}/${Date.now().toString(36)}${ext}`;

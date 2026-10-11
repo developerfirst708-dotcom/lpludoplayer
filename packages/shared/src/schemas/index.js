@@ -35,9 +35,9 @@ export const playerNameSchema = z
 
 /** Adda Ludo rules: ₹50 – ₹1,00,000, multiples of ₹50 (see prize.js). */
 export const stakeSchema = z
-  .number({ invalid_type_error: "Stake is required" })
+  .number({ invalid_type_error: "Amount is required" })
   .int()
-  .refine((v) => isValidStake(v), "Stake must be ₹50–₹1,00,000 in multiples of ₹50");
+  .refine((v) => isValidStake(v), "Amount must be ₹50–₹1,00,000 in multiples of ₹50");
 
 export const createContestSchema = z.object({ stake: stakeSchema });
 
@@ -45,7 +45,7 @@ export const objectIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid id"
 
 export const submitRoomSchema = z.object({
   contestId: objectIdSchema,
-  roomCode: z.string().trim().min(4).max(20),
+  roomCode: z.string().trim().regex(/^\d{8}$/, "Room code must be 8 digits"),
 });
 
 export const submitResultSchema = z.object({
@@ -60,10 +60,31 @@ export const updateProfileSchema = z.object({
   payoutUpi: z.string().trim().regex(/^[\w.-]{2,64}@[a-zA-Z]{2,32}$/, "Enter a valid UPI ID").optional(),
 });
 
-export const withdrawRequestSchema = z.object({
-  amountPaise: z.number({ invalid_type_error: "Amount is required" }).int().min(30000, "Minimum withdrawal is ₹300"),
-  upiId: z.string().trim().regex(/^[\w.-]{2,64}@[a-zA-Z]{2,32}$/, "Enter a valid UPI ID"),
-});
+export const withdrawRequestSchema = z
+  .object({
+    amountPaise: z.number({ invalid_type_error: "Amount is required" }).int().min(20000, "Minimum withdrawal is ₹200"),
+    method: z.enum(["upi", "bank"]).default("upi"),
+    upiId: z.string().trim().regex(/^[\w.-]{2,64}@[a-zA-Z]{2,32}$/, "Enter a valid UPI ID").optional(),
+    bank: z
+      .object({
+        accountName: z.string().trim().min(2, "Enter the account holder name").max(80),
+        accountNumber: z.string().trim().regex(/^\d{6,20}$/, "Enter a valid account number"),
+        ifsc: z.string().trim().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, "Enter a valid IFSC code"),
+      })
+      .optional(),
+  })
+  .superRefine((d, ctx) => {
+    // reference rule: anything above ₹2000 must be paid to a bank account
+    if (d.amountPaise > 200000 && d.method !== "bank") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["method"], message: "Withdrawals above ₹2000 must go to a bank account" });
+    }
+    if (d.method === "bank" && !d.bank) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bank"], message: "Enter your bank details" });
+    }
+    if (d.method === "upi" && !d.upiId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["upiId"], message: "Enter your UPI ID" });
+    }
+  });
 
 export const KYC_DOC_TYPES = ["aadhar", "pan"];
 

@@ -18,6 +18,7 @@ export const ALL_PERMISSIONS = [
   "ledger",
   "audit",
   "setting",
+  "client_tracking",
 ];
 
 /** keep only known, de-duplicated permission keys */

@@ -8,6 +8,8 @@ import { getSettings } from "../db/models/settings.model.js";
 export async function publicSettings(_req, res) {
   const s = await getSettings();
   res.json({
+    websiteName: s.websiteName || null,
     supportWhatsapp: s.supportWhatsapp || null,
+    maintenanceMode: Boolean(s.maintenanceMode),
   });
 }

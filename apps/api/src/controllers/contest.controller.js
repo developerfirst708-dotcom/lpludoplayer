@@ -23,11 +23,12 @@ function contestDto(contest, { userId, includeRoomCode = false } = {}) {
     status: contest.status,
     createdAt: contest.createdAt,
     expiresAt: contest.expiresAt || null,
+    timerStartedAt: contest.timerStartedAt || null,
     winnerUserId: contest.winnerUserId || null,
     players: contest.players.map((p) => ({
       seat: p.seat,
       userId: p.userId?._id || p.userId,
-      name: p.userId?.name || null,
+      name: contest.isDummy && p.seat === 1 ? contest.dummyName : (p.userId?.name || null),
       isYou: Boolean(userId && String(p.userId._id || p.userId) === String(userId)),
     })),
     prize: computePrize(contest.stake).prizePaise, // winner's credit (slab-based, same maths as settlement)
@@ -66,7 +67,7 @@ export async function listMine(req, res) {
   res.json({ items: dtos, total, page, limit });
 }
 
-/** POST /contests { stake } — creator's stake is HELD, not spent */
+/** POST /contests { stake } — balance is checked, nothing is held until the creator accepts */
 export async function create(req, res) {
   const { stake } = validate(createContestSchema, req.body);
   const contest = await contestService.createContest({
@@ -74,16 +75,35 @@ export async function create(req, res) {
   });
   const fresh = await Contest.findById(contest._id).select("+roomCode").populate("players.userId", "name");
   emitContestUpdate(fresh || contest);
-  emitWalletUpdate(req.user.id, await walletView(req.user.id));
   res.status(201).json({ contest: contestDto(fresh || contest, { userId: req.user.id, includeRoomCode: true }) });
 }
 
-/** POST /contests/:id/join */
+/** POST /contests/:id/join — sends a join request; no money moves yet */
 export async function join(req, res) {
   const contest = await contestService.joinContest({ userId: req.user.id, contestId: req.params.id, ip: req.ip });
   const fresh = await Contest.findById(contest._id).select("+roomCode").populate("players.userId", "name"); // re-read with room code + player names
   emitContestUpdate(fresh || contest);
-  emitWalletUpdate(req.user.id, await walletView(req.user.id));
+  res.json({ contest: contestDto(fresh || contest, { userId: req.user.id, includeRoomCode: true }) });
+}
+
+/** POST /contests/:id/accept — the creator starts the match; both stakes are locked */
+export async function accept(req, res) {
+  const contest = await contestService.acceptContest({ userId: req.user.id, contestId: req.params.id });
+  const fresh = await Contest.findById(contest._id).select("+roomCode").populate("players.userId", "name");
+  const doc = fresh || contest;
+  emitContestUpdate(doc);
+  for (const p of doc.players) {
+    const uid = p.userId?._id || p.userId;
+    emitWalletUpdate(uid, await walletView(uid));
+  }
+  res.json({ contest: contestDto(doc, { userId: req.user.id, includeRoomCode: true }) });
+}
+
+/** POST /contests/:id/reject — the creator declines the join request (battle → open) */
+export async function reject(req, res) {
+  const contest = await contestService.rejectJoinRequest({ userId: req.user.id, contestId: req.params.id });
+  const fresh = await Contest.findById(contest._id).select("+roomCode").populate("players.userId", "name");
+  emitContestUpdate(fresh || contest);
   res.json({ contest: contestDto(fresh || contest, { userId: req.user.id, includeRoomCode: true }) });
 }
 
@@ -140,18 +160,21 @@ export async function submitResult(req, res) {
   res.json(out);
 }
 
-/** GET /contests/:id — full detail for one contest */
+/** GET /contests/:id — full detail for one contest (participants/admins only) */
 export async function getContest(req, res) {
   const contest = await Contest.findById(req.params.id).select("+roomCode").populate("players.userId", "name");
   if (!contest) throw new NotFoundError("Battle not found");
+  const isStaff = ["admin", "superadmin"].includes(req.user.role);
+  if (!isStaff && !contest.isParticipant(req.user.id)) {
+    throw new ForbiddenError("Not your battle");
+  }
   res.json({ contest: contestDto(contest, { userId: req.user.id, includeRoomCode: true }) });
 }
 
-/** POST /contests/:id/cancel */
+/** POST /contests/:id/cancel — open/join_requested battles hold nothing, so no money moves */
 export async function cancel(req, res) {
   const contest = await contestService.cancelContest({ userId: req.user.id, contestId: req.params.id });
   const fresh = await Contest.findById(contest._id).select("+roomCode").populate("players.userId", "name");
   emitContestUpdate(fresh || contest);
-  emitWalletUpdate(req.user.id, await walletView(req.user.id));
   res.json({ contest: contestDto(fresh || contest, { userId: req.user.id }) });
 }

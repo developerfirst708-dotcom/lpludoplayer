@@ -1,5 +1,6 @@
 import { Contest, CONTEST_STATES } from "../db/models/contest.model.js";
 import { User } from "../db/models/user.model.js";
+import mongoose from "mongoose";
 import { withTransaction } from "../db/connect.js";
 import { withLock } from "../db/redis.js";
 import {
@@ -15,7 +16,7 @@ const l = log("contest");
 
 const OPEN_LIST_TTL = 3; // seconds — cache for /contests/open (fixes P2)
 const OPEN_LIST_KEY = "contests:open:list:v1";
-const BATTLE_OPEN_TTL_MS = 10 * 60 * 1000; // unjoined battles die in 10 min
+const BATTLE_OPEN_TTL_MS = 5 * 60 * 1000; // unjoined battles die in 5 min (reference)
 
 /** Adda Ludo rule: a player may hold at most this many open (searching) battles. */
 export const MAX_SEARCHING_BATTLES = 2;
@@ -52,16 +53,15 @@ async function hasActiveUnsubmittedContest(userId) {
 
 /**
  * Adda Ludo rule: joining a battle auto-cancels the player's other open
- * battles (creators of the joined battle included). Their stakes are REFUNDED
- * inside each cancellation transaction — the reference app's version left the
- * money locked (C1).
+ * battles. An open battle holds no stake (money is only locked on accept), so
+ * this only flips the status — no refund is needed.
  */
 async function cancelOtherOpenBattles(userId, excludeContestId) {
   const others = await Contest.find({
     "players.userId": userId,
     status: CONTEST_STATES.OPEN,
     _id: { $ne: excludeContestId },
-  }).select("_id stake");
+  }).select("_id");
 
   for (const other of others) {
     try {
@@ -74,20 +74,12 @@ async function cancelOtherOpenBattles(userId, excludeContestId) {
             note: "auto-cancelled: another battle was joined",
           });
           await fresh.save({ session });
-          const walletView = await walletService.refundEntryFee({
-            userId: fresh.players[0].userId,
-            contestId: fresh._id,
-            amountPaise: fresh.stake,
-            note: "Battle auto-cancelled — stake refunded",
-            session,
-          });
           await invalidateOpenList();
-          return { contest: fresh, walletView };
+          return { contest: fresh };
         })
       );
       if (out) {
         emitContestUpdate(out.contest);
-        emitWalletUpdate(userId, out.walletView);
         l.info({ contestId: String(other._id), userId: String(userId) }, "open battle auto-cancelled on join");
       }
     } catch (err) {
@@ -98,11 +90,12 @@ async function cancelOtherOpenBattles(userId, excludeContestId) {
 }
 
 /**
- * Create an open battle. The creator's stake is HELD (not spent) so an
- * unmatched/cancelled battle refunds it — semantics the reference app got wrong.
+ * Create an open battle. The stake is only CHECKED here (read-only) — it is not
+ * held. Creating a battle costs nothing; the stake is locked when the creator
+ * accepts a join request (see acceptContest), which is the moment the match starts.
  */
 export async function createContest({ userId, stakePaise, ip }) {
-  if (!isValidStake(stakePaise)) throw new BadRequestError("Unknown stake amount");
+  if (!isValidStake(stakePaise)) throw new BadRequestError("Unknown amount");
 
   // Adda Ludo guards: one active battle at a time, max 2 open, no same amount twice
   if (await hasActiveUnsubmittedContest(userId)) {
@@ -116,64 +109,158 @@ export async function createContest({ userId, stakePaise, ip }) {
     throw new ConflictError("Maximum 2 open battles allowed. Cancel one first");
   }
 
+  // balance is checked but NOT locked — the stake only moves once the creator accepts
   await walletService.assertAvailable(userId, stakePaise);
 
-  return withLock(`wallet:${userId}`, () =>
-    withTransaction(async (session) => {
-      const [contest] = await Contest.create(
-        [{
-          stake: stakePaise,
-          status: CONTEST_STATES.OPEN,
-          players: [{ userId, seat: 1, joinedAt: new Date(), joinedIp: ip }],
-          expiresAt: new Date(Date.now() + BATTLE_OPEN_TTL_MS),
-        }],
-        { session }
-      );
-      await walletService.holdEntryFee({ userId, contestId: contest._id, amountPaise: stakePaise, session });
-      await invalidateOpenList();
-      l.info({ contestId: String(contest._id), userId: String(userId), stakePaise }, "contest created");
-      return contest;
-    })
-  );
+  return withTransaction(async (session) => {
+    const [contest] = await Contest.create(
+      [{
+        stake: stakePaise,
+        status: CONTEST_STATES.OPEN,
+        players: [{ userId, seat: 1, joinedAt: new Date(), joinedIp: ip }],
+        expiresAt: new Date(Date.now() + BATTLE_OPEN_TTL_MS),
+      }],
+      { session }
+    );
+    await invalidateOpenList();
+    l.info({ contestId: String(contest._id), userId: String(userId), stakePaise }, "contest created");
+    return contest;
+  });
 }
 
-/** Second player joins an open battle → running. Both holds exist before play. */
+/* --------------------------- dummy (social proof) -------------------------- */
+
+/** Admin-created dummy battle — shown in the lobby, never playable, never expires. */
+export async function createDummyContest({ stakePaise, name, mobile }) {
+  if (!isValidStake(stakePaise)) throw new BadRequestError("Unknown amount");
+  const [contest] = await Contest.create([
+    {
+      stake: stakePaise,
+      status: CONTEST_STATES.OPEN,
+      isDummy: true,
+      dummyName: name || "Player",
+      dummyMobile: mobile || null,
+      players: [{ userId: new mongoose.Types.ObjectId(), seat: 1, joinedAt: new Date() }],
+      expiresAt: new Date(Date.now() + 3650 * 24 * 3600 * 1000), // dummies don't expire
+    },
+  ]);
+  await invalidateOpenList();
+  return contest;
+}
+
+export async function listDummyContests() {
+  return Contest.find({ isDummy: true }).sort({ createdAt: -1 }).lean();
+}
+
+export async function deleteDummyContest(id) {
+  const res = await Contest.deleteOne({ _id: id, isDummy: true });
+  await invalidateOpenList();
+  if (!res.deletedCount) throw new NotFoundError("Dummy battle not found");
+  return true;
+}
+
+/**
+ * Second player REQUESTS to join an open battle → join_requested. Only a
+ * read-only balance check runs here; no money moves. The creator must accept
+ * (acceptContest) before both stakes are locked and the match goes live.
+ */
 export async function joinContest({ userId, contestId, ip }) {
   // Adda Ludo guard: no new bets while an active battle is pending
   if (await hasActiveUnsubmittedContest(userId)) {
     throw new ConflictError("You have an active battle. Submit its result before joining a new one");
   }
 
+  // a dummy (social-proof) battle is never playable — clicking it removes it
+  const dummy = await Contest.findOne({ _id: contestId, isDummy: true }).select("_id").lean();
+  if (dummy) {
+    await Contest.deleteOne({ _id: dummy._id });
+    await invalidateOpenList();
+    throw new ConflictError("This battle is no longer available");
+  }
+
   const contest = await withLock(`contest:${contestId}`, () =>
-    withLock(`wallet:${userId}`, () =>
-      withTransaction(async (session) => {
-        const contest = await Contest.findOne({ _id: contestId }).session(session);
-        if (!contest) throw new NotFoundError("Battle not found");
-        if (contest.status !== CONTEST_STATES.OPEN) throw new ConflictError("Battle is not open to join");
-        if (contest.isParticipant(userId)) throw new ConflictError("You already own this battle");
+    withTransaction(async (session) => {
+      const contest = await Contest.findOne({ _id: contestId }).session(session);
+      if (!contest) throw new NotFoundError("Battle not found");
+      if (contest.status !== CONTEST_STATES.OPEN) throw new ConflictError("Battle is not open to join");
+      if (contest.isParticipant(userId)) throw new ConflictError("You already own this battle");
 
-        await walletService.assertAvailable(userId, contest.stake);
-        await walletService.holdEntryFee({ userId, contestId, amountPaise: contest.stake, session });
+      // balance is checked but NOT locked — the stake moves only when the creator accepts
+      await walletService.assertAvailable(userId, contest.stake);
 
-        contest.players.push({ userId, seat: 2, joinedAt: new Date(), joinedIp: ip });
-        contest.transition(CONTEST_STATES.JOIN_REQUESTED, { actor: userId, note: "second player seated" });
-        contest.transition(CONTEST_STATES.RUNNING, { actor: userId, note: "battle live" });
-        await contest.save({ session });
+      contest.players.push({ userId, seat: 2, joinedAt: new Date(), joinedIp: ip });
+      contest.transition(CONTEST_STATES.JOIN_REQUESTED, { actor: userId, note: "second player seated — awaiting creator" });
+      await contest.save({ session });
 
-        await invalidateOpenList();
-        l.info({ contestId: String(contestId), userId: String(userId), stake: contest.stake }, "contest joined");
-        return contest;
-      })
-    )
+      await invalidateOpenList();
+      l.info({ contestId: String(contestId), userId: String(userId), stake: contest.stake }, "contest join requested");
+      return contest;
+    })
   );
 
   // Adda Ludo rule: joining cancels the creator's and the joiner's other open
-  // battles (each cancellation refunds that battle's creator hold).
+  // battles (open battles hold no stake, so nothing is refunded).
   const creatorId = contest.players.find((p) => p.seat === 1)?.userId;
   if (creatorId) await cancelOtherOpenBattles(creatorId, contestId);
   await cancelOtherOpenBattles(userId, contestId);
 
   return contest;
+}
+
+/**
+ * Creator accepts a join request → THE MATCH STARTS: both players' entry fees
+ * are locked (held, not spent) and the battle goes `running`. This is the only
+ * place a battle's stakes are locked; open / join_requested battles hold nothing.
+ */
+export async function acceptContest({ userId, contestId }) {
+  const pre = await Contest.findOne({ _id: contestId }).lean();
+  if (!pre) throw new NotFoundError("Battle not found");
+  if (!pre.players.some((p) => String(p.userId) === String(userId))) {
+    throw new ForbiddenError("Not your battle");
+  }
+  const creator = pre.players.find((p) => p.seat === 1);
+  const opponent = pre.players.find((p) => p.seat === 2);
+  if (!creator || String(creator.userId) !== String(userId)) {
+    throw new ForbiddenError("Only the creator can start this battle");
+  }
+  if (!opponent) throw new ConflictError("No opponent has joined yet");
+
+  return withLock(`contest:${contestId}`, () =>
+    withLock(`wallet:${creator.userId}`, () =>
+      withLock(`wallet:${opponent.userId}`, () =>
+        withTransaction(async (session) => {
+          const contest = await Contest.findOne({ _id: contestId }).session(session);
+          if (!contest) throw new NotFoundError("Battle not found");
+          if (contest.status === CONTEST_STATES.RUNNING && contest.entryLocked) return contest; // idempotent replay
+          if (contest.status !== CONTEST_STATES.JOIN_REQUESTED) {
+            throw new ConflictError("This battle is not waiting for an accept");
+          }
+
+          await walletService.assertAvailable(creator.userId, contest.stake);
+          try {
+            await walletService.assertAvailable(opponent.userId, contest.stake);
+          } catch {
+            throw new ForbiddenError("Your opponent no longer has enough balance for this battle");
+          }
+
+          await walletService.holdEntryFee({ userId: creator.userId, contestId, amountPaise: contest.stake, session });
+          await walletService.holdEntryFee({ userId: opponent.userId, contestId, amountPaise: contest.stake, session });
+
+          contest.set("entryLocked", true);
+          contest.set("timerStartedAt", new Date());
+          contest.transition(CONTEST_STATES.RUNNING, { actor: userId, note: "creator accepted — battle live" });
+          await contest.save({ session });
+
+          await invalidateOpenList();
+          l.info(
+            { contestId: String(contestId), creator: String(creator.userId), opponent: String(opponent.userId), stake: contest.stake },
+            "battle accepted — stakes locked"
+          );
+          return contest;
+        })
+      )
+    )
+  );
 }
 
 /**
@@ -185,13 +272,22 @@ export async function submitRoomCode({ userId, contestId, roomCode }) {
     withTransaction(async (session) => {
       const contest = await Contest.findOne({ _id: contestId }).session(session);
       if (!contest) throw new NotFoundError("Battle not found");
-      if (!contest.isParticipant(userId)) throw new ForbiddenError("Not your battle");
-      if (contest.status !== CONTEST_STATES.RUNNING) throw new ConflictError("Battle is not running");
+      // reference rule: only the creator shares the room code
+      const creator = contest.players.find((p) => p.seat === 1);
+      if (!creator || String(creator.userId) !== String(userId)) {
+        throw new ForbiddenError("Only the creator can submit the room code");
+      }
+      if (![CONTEST_STATES.RUNNING, CONTEST_STATES.ROOM_SUBMITTED].includes(contest.status)) {
+        throw new ConflictError("Battle is not running");
+      }
 
       contest.set("roomCode", roomCode.trim());
       contest.set("roomCodeUp", roomCode.trim().toUpperCase());
       contest.set("roomSubmittedBy", userId);
       contest.set("roomSubmittedAt", new Date());
+      if (contest.status === CONTEST_STATES.RUNNING) {
+        contest.transition(CONTEST_STATES.ROOM_SUBMITTED, { actor: userId, note: "room code shared" });
+      }
       await contest.save({ session });
       return true;
     })
@@ -212,12 +308,26 @@ export async function submitResult({ userId, contestId, outcome, screenshotKeys 
       if (!contest) throw new NotFoundError("Battle not found");
       if (!contest.isParticipant(userId)) throw new ForbiddenError("Not your battle");
 
-      const allowed = [CONTEST_STATES.RUNNING, CONTEST_STATES.ROOM_SUBMITTED, CONTEST_STATES.RESULT_SUBMITTED];
+      const allowed = [CONTEST_STATES.RUNNING, CONTEST_STATES.ROOM_SUBMITTED, CONTEST_STATES.RESULT_SUBMITTED, CONTEST_STATES.CANCEL_REQUESTED];
       if (!allowed.includes(contest.status)) {
         throw new ConflictError(`Cannot submit a result from status "${contest.status}"`);
       }
 
+      // a player may only report once (reference rule)
+      contest.resultReports = contest.resultReports || [];
+      if (contest.resultReports.some((r) => String(r.userId) === String(userId))) {
+        throw new ConflictError("You have already submitted a result for this battle");
+      }
+
       if (outcome === "cancel") {
+        const otherCancelled = contest.resultReports.some(
+          (r) => String(r.userId) !== String(userId) && r.outcome === "cancel"
+        );
+        if (otherCancelled) {
+          // both players agree to cancel -> refund both immediately (reference)
+          const result = await refundAllContest({ contestId, settledBy: "players", session });
+          return result.contest;
+        }
         contest.conflict = {
           active: true,
           raisedBy: userId,
@@ -225,7 +335,9 @@ export async function submitResult({ userId, contestId, outcome, screenshotKeys 
           autoRefundAt: new Date(Date.now() + conflictRefundHours() * 3600_000),
         };
         contest.markModified("conflict");
-        contest.transition(CONTEST_STATES.CANCEL_REQUESTED, { actor: userId, note: "cancel requested" });
+        if (contest.status !== CONTEST_STATES.CANCEL_REQUESTED) {
+          contest.transition(CONTEST_STATES.CANCEL_REQUESTED, { actor: userId, note: "cancel requested" });
+        }
       } else {
         if (contest.status !== CONTEST_STATES.RESULT_SUBMITTED) {
           contest.transition(CONTEST_STATES.RESULT_SUBMITTED, { actor: userId, note: "result submitted" });
@@ -234,7 +346,6 @@ export async function submitResult({ userId, contestId, outcome, screenshotKeys 
       }
 
       // keep each player's own claim + proof screenshots (never trust a single side's word alone)
-      contest.resultReports = contest.resultReports || [];
       contest.resultReports.push({
         userId,
         outcome,
@@ -266,7 +377,12 @@ export async function settleContest({ contestId, winnerUserId, settledBy, sessio
   if (!loser) throw new BadRequestError("Battle needs both players present before settling");
 
   const b = computePrize(contest.stake);
-  await walletService.releaseEntryFee({ userId: winner.userId, contestId, amountPaise: contest.stake, session });
+  // Both stakes are CONSUMED (the reference removes both from playable at lock and
+  // never returns them). The winner is then paid the GROSS prize into `winnings`,
+  // so the winner nets `prize - stake` and the house keeps the commission. (Fixes
+  // the rebuild's overpay where the winner's stake was released *and* the full
+  // prize credited — which minted money.)
+  await walletService.consumeEntryFee({ userId: winner.userId, contestId, amountPaise: contest.stake, session });
   const loserWallet = await walletService.consumeEntryFee({ userId: loser.userId, contestId, amountPaise: contest.stake, session });
   const wallet = await walletService.creditPrize({
     userId: winner.userId, contestId, amountPaise: b.prizePaise, settledBy, session,
@@ -322,21 +438,59 @@ export async function decideContest({ contestId, winnerUserId, settledBy = "admi
   return result;
 }
 
-/** Cancel an open/unmatched battle — creator's hold is refunded. */
+/** Cancel an open/unmatched battle (or decline a join request). Nothing is held
+ *  before `running`, so cancelling moves no money. */
 export async function cancelContest({ userId, contestId }) {
   return withLock(`contest:${contestId}`, () =>
     withTransaction(async (session) => {
       const contest = await Contest.findOne({ _id: contestId }).session(session);
       if (!contest) throw new NotFoundError("Battle not found");
       if (!contest.isParticipant(userId)) throw new ForbiddenError("Not your battle");
+
+      // join_requested: the OPPONENT withdraws (battle returns to `open`);
+      // the CREATOR declining is handled by rejectJoinRequest.
+      if (contest.status === CONTEST_STATES.JOIN_REQUESTED) {
+        const creator = contest.players.find((p) => p.seat === 1);
+        if (creator && String(creator.userId) !== String(userId)) {
+          contest.players = contest.players.filter((p) => p.seat === 1);
+          contest.markModified("players");
+          contest.set("expiresAt", new Date(Date.now() + BATTLE_OPEN_TTL_MS));
+          contest.transition(CONTEST_STATES.OPEN, { actor: userId, note: "join request withdrawn" });
+          await contest.save({ session });
+          await invalidateOpenList();
+          return contest;
+        }
+      }
+
       if (!isTransitionAllowed(contest.status, CONTEST_STATES.CANCELLED)) {
         throw new ConflictError(`A battle in "${contest.status}" cannot be cancelled`);
       }
       contest.transition(CONTEST_STATES.CANCELLED, { actor: userId, note: "cancelled by player" });
       await contest.save({ session });
-      await walletService.refundEntryFee({
-        userId, contestId, amountPaise: contest.stake, note: "You cancelled the battle", session,
-      });
+      await invalidateOpenList();
+      return contest;
+    })
+  );
+}
+
+/** Creator declines a join request — drop the opponent, battle returns to `open`. */
+export async function rejectJoinRequest({ userId, contestId }) {
+  return withLock(`contest:${contestId}`, () =>
+    withTransaction(async (session) => {
+      const contest = await Contest.findOne({ _id: contestId }).session(session);
+      if (!contest) throw new NotFoundError("Battle not found");
+      const creator = contest.players.find((p) => p.seat === 1);
+      if (!creator || String(creator.userId) !== String(userId)) {
+        throw new ForbiddenError("Only the creator can decline a join request");
+      }
+      if (contest.status !== CONTEST_STATES.JOIN_REQUESTED) {
+        throw new ConflictError("There is no join request to decline");
+      }
+      contest.players = contest.players.filter((p) => p.seat === 1);
+      contest.markModified("players");
+      contest.set("expiresAt", new Date(Date.now() + BATTLE_OPEN_TTL_MS));
+      contest.transition(CONTEST_STATES.OPEN, { actor: userId, note: "join request declined" });
+      await contest.save({ session });
       await invalidateOpenList();
       return contest;
     })
@@ -350,12 +504,15 @@ export async function refundAllContest({ contestId, settledBy = "system", sessio
   if (contest.settlement?.settledAt) return { contest, alreadySettled: true };
 
   const walletViews = {};
-  for (const p of contest.players) {
-    const view = await walletService.refundEntryFee({
-      userId: p.userId, contestId, amountPaise: contest.stake,
-      note: "Battle cancelled — stake refunded", session,
-    });
-    walletViews[String(p.userId)] = view;
+  // only a battle that reached `running` has locked stakes to give back
+  if (contest.entryLocked) {
+    for (const p of contest.players) {
+      const view = await walletService.refundEntryFee({
+        userId: p.userId, contestId, amountPaise: contest.stake,
+        note: "Battle cancelled — amount refunded", session,
+      });
+      walletViews[String(p.userId)] = view;
+    }
   }
   contest.settlement = { settledAt: new Date(), settledBy };
   contest.transition(CONTEST_STATES.CANCELLED, { actor: settledBy, note: "refunded all players" });
@@ -399,7 +556,7 @@ export async function expireStaleConflicts() {
   return refunded;
 }
 
-/** Force-expire an open battle from the admin panel. */
+/** Force-expire an open battle from the admin panel. Nothing was held → no money moves. */
 export async function expireContestById(contestId, actor = "admin") {
   return withLock(`contest:${contestId}`, () =>
     withTransaction(async (session) => {
@@ -409,14 +566,9 @@ export async function expireContestById(contestId, actor = "admin") {
         throw new ConflictError(`Only open battles can be expired (this one is "${contest.status}")`);
       }
       contest.transition(CONTEST_STATES.EXPIRED, { actor, note: "force-expired" });
-      contest.set("entryHoldReleased", true);
       await contest.save({ session });
-      const walletView = await walletService.refundEntryFee({
-        userId: contest.players[0].userId, contestId, amountPaise: contest.stake,
-        note: "Battle expired — stake refunded", session,
-      });
       await invalidateOpenList();
-      return { contest, walletView, creatorId: contest.players[0].userId };
+      return { contest, creatorId: contest.players[0].userId };
     })
   );
 }
@@ -447,11 +599,12 @@ export async function refundContestById(contestId, actor = "admin") {
 
 /**
  * Expire open battles whose TTL elapsed without an opponent joining.
- * Runs from the `contest.expire` sweep — refunds the creator's hold FIRST,
- * then flips the status (the reference app's TTL delete could strand the money).
+ * Open battles hold no stake, so this only flips the status. Also releases a
+ * stale join_requested battle back to `open` (nothing was locked, and the
+ * creator never accepted) so the joiner is not blocked forever.
  */
 export async function expireStaleOpenContests() {
-  const stale = await Contest.find({ status: CONTEST_STATES.OPEN, expiresAt: { $lte: new Date() } })
+  const stale = await Contest.find({ status: CONTEST_STATES.OPEN, isDummy: { $ne: true }, expiresAt: { $lte: new Date() } })
     .limit(100)
     .select("_id")
     .lean();
@@ -464,27 +617,50 @@ export async function expireStaleOpenContests() {
           const fresh = await Contest.findOne({ _id: c._id }).session(session);
           if (!fresh || fresh.status !== CONTEST_STATES.OPEN) return null;
           fresh.transition(CONTEST_STATES.EXPIRED, { actor: "system", note: "expired: no opponent joined" });
-          fresh.set("entryHoldReleased", true);
           await fresh.save({ session });
-          const walletView = await walletService.refundEntryFee({
-            userId: fresh.players[0].userId, contestId: fresh._id, amountPaise: fresh.stake,
-            note: "Battle expired — stake refunded", session,
-          });
           await invalidateOpenList();
-          return { contest: fresh, walletView, creatorId: fresh.players[0].userId };
+          return { contest: fresh };
         })
       );
-      if (result) {
-        emitContestUpdate(result.contest);
-        emitWalletUpdate(result.creatorId, result.walletView);
-      }
+      if (result) emitContestUpdate(result.contest);
       expired += 1;
     } catch (err) {
       l.error({ contestId: String(c._id), err: err.message }, "open-battle expiry failed");
     }
   }
   if (stale.length) l.info({ scanned: stale.length, expired }, "open-battle expiry sweep done");
-  return expired;
+
+  // join requests the creator never accepted → back to `open` (drop seat 2)
+  const staleRequests = await Contest.find({ status: CONTEST_STATES.JOIN_REQUESTED, expiresAt: { $lte: new Date() } })
+    .limit(100)
+    .select("_id")
+    .lean();
+
+  let reverted = 0;
+  for (const c of staleRequests) {
+    try {
+      const result = await withLock(`contest:${c._id}`, () =>
+        withTransaction(async (session) => {
+          const fresh = await Contest.findOne({ _id: c._id }).session(session);
+          if (!fresh || fresh.status !== CONTEST_STATES.JOIN_REQUESTED) return null;
+          fresh.players = fresh.players.filter((p) => p.seat === 1);
+          fresh.markModified("players");
+          fresh.set("expiresAt", new Date(Date.now() + BATTLE_OPEN_TTL_MS));
+          fresh.transition(CONTEST_STATES.OPEN, { actor: "system", note: "join request timed out" });
+          await fresh.save({ session });
+          await invalidateOpenList();
+          return { contest: fresh };
+        })
+      );
+      if (result) emitContestUpdate(result.contest);
+      reverted += 1;
+    } catch (err) {
+      l.error({ contestId: String(c._id), err: err.message }, "join-request timeout failed");
+    }
+  }
+  if (staleRequests.length) l.info({ scanned: staleRequests.length, reverted }, "join-request timeout sweep done");
+
+  return expired + reverted;
 }
 
 /**
