@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { sendOtp, verifyOtp } from "../lib/auth.js";
 import { phoneSchema } from "@lpludo/shared/schemas"; // same zod schema as the server (S11)
 import { useToast } from "../components/Toast.jsx";
-import { Button, Card, Input } from "../components/ui.jsx";
+import { Button, Card } from "../components/ui.jsx";
 
 /**
  * Login — Mobile + OTP with dynamic ambient styling and interactive focus states.
@@ -90,18 +90,24 @@ export default function Login() {
         {/* Input Form Section */}
         {step === "phone" ? (
           <form onSubmit={requestOtp} className="flex flex-col gap-4">
-            <Input
-              label="Mobile number"
-              inputMode="numeric"
-              autoComplete="tel"
-              placeholder="Enter mobile no."
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="transition-all duration-200 focus:ring-2 focus:ring-amber-400/50"
-            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-700">Mobile number</label>
+              {/* Yellow Mobile Number Input Box */}
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="tel"
+                placeholder="Enter mobile no."
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full rounded-xl border border-amber-300 bg-amber-100/60 px-3.5 py-3 text-sm font-bold text-slate-900 outline-none transition-all duration-200 placeholder:font-normal placeholder:text-slate-500 focus:border-amber-500 focus:bg-amber-100 focus:ring-2 focus:ring-amber-400/50"
+              />
+            </div>
+
+            {/* Green Send OTP Button */}
             <Button
               type="submit"
-              className="w-full mt-1 bg-gradient-to-r from-amber-400 via-brand-500 to-amber-500 shadow-md hover:shadow-lg active:scale-95 transition-all"
+              className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md active:scale-95 transition-all"
               loading={busy}
             >
               Send OTP
@@ -112,6 +118,7 @@ export default function Login() {
             <p className="text-xs font-semibold text-slate-500 text-center">
               OTP sent to +91 {phone} {devOtp && <span className="font-bold text-brand-600">(dev: {devOtp})</span>}
             </p>
+
             {/* OTP Input Box with Yellow Styling */}
             <input
               inputMode="numeric"
@@ -131,6 +138,7 @@ export default function Login() {
             >
               Verify &amp; play
             </Button>
+            
             <button
               type="button"
               onClick={() => setStep("phone")}
