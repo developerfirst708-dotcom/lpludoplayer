@@ -5,7 +5,7 @@ import { socket } from "../lib/socket.js";
 import { SectionTitle } from "../components/ui.jsx";
 
 /**
- * Home — launcher layout with referral banner, game cards, and floating WhatsApp support.
+ * Home — launcher layout with referral banner, game cards, and inline SVG WhatsApp support.
  */
 
 /** One game card: poster visual on top with badge, white info footer below. */
@@ -34,7 +34,11 @@ function GameCard({ title, subtitle, cta, image, imageAlt, onPlay, disabled = fa
             if (!disabled && onPlay) onPlay();
           }}
           disabled={disabled}
-          className="shrink-0 rounded-full bg-brand-500 px-5 py-2.5 text-xs font-extrabold tracking-normal text-neutral-900 shadow-btn-gold transition-all hover:bg-[#E5A81E] active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+          className={`shrink-0 rounded-full font-extrabold tracking-normal transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 ${
+            disabled
+              ? "bg-gray-200 px-3 py-1.5 text-[11px] text-gray-500 shadow-none"
+              : "bg-brand-500 px-5 py-2.5 text-xs text-neutral-900 shadow-btn-gold hover:bg-[#E5A81E]"
+          }`}
         >
           {cta}
         </button>
@@ -67,7 +71,7 @@ export default function Home() {
   }, [qc]);
 
   return (
-    <div className="relative flex flex-col gap-6 pb-16">
+    <div className="relative flex flex-col gap-6 pb-20">
       {/* Welcome banner with padding and top margin gap */}
       <section
         className="my-2 flex items-center justify-center rounded-xl border border-[#FAD655] bg-gradient-to-b from-[#FEF4BA] via-[#FDE88C] to-[#FCD95B] py-4 px-3 shadow-sm"
@@ -106,28 +110,25 @@ export default function Home() {
           imageAlt="Classic App Ludo poster"
           disabled
           badge={
-            <span className="rounded-full bg-amber-500/90 backdrop-blur-sm px-3 py-1 text-[11px] font-black uppercase text-neutral-950 shadow-md">
+            <span className="rounded-full bg-amber-500/90 backdrop-blur-sm px-2.5 py-0.5 text-[10px] font-black uppercase text-neutral-950 shadow-md">
               Coming Soon
             </span>
           }
         />
       </div>
 
-      {/* Floating WhatsApp Support Button */}
+      {/* Floating WhatsApp Support Button (Direct Embedded Inline SVG) */}
       <a
         href="https://wa.me/919999999999"
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed bottom-20 right-4 z-50 flex flex-col items-center gap-1 transition-transform hover:scale-105 active:scale-95"
+        className="fixed bottom-20 right-4 z-50 flex flex-col items-center gap-0.5 transition-transform hover:scale-105 active:scale-95"
         aria-label="WhatsApp Support"
       >
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-xl ring-2 ring-emerald-500/50 p-1">
-          <img src="/whatsapp.png" alt="WhatsApp Support" className="h-full w-full object-contain" />
-        </div>
-        <span className="rounded-full bg-neutral-900/90 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-white shadow-md backdrop-blur-sm">
-          Support
-        </span>
-      </a>
-    </div>
-  );
-}
+        <div className="flex h-13 w-13 items-center justify-center rounded-full bg-[#25D366] p-2.5 text-white shadow-xl ring-2 ring-white">
+          <svg
+            className="h-full w-full fill-current"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path d="M12.012 2c-5.508 0-9.988 4.479-9.988 9.988 0 1.762.459 3.483 1.332 5.002L2 22l5.127-1.34c1.464.799 3.118 1.218 4.885 1.218 5.508 0 9.988-4.479 9.988-9.988 0-5.509-4.48-9.99-9.988-9.99zm5.834 14.152c-.244.688-1.229 1.309-1.996 1.439-.527.088-1.213.158-3.526-.8-2.959-1.228-4.862-4.237-5.011-4.435-.146-.198-1.206-1.606-1.206-3.064 0-1.458.763-2.176 1.034-2.471.271-.295.592-.369.789-.369.197 0 .394.002.566.012.182.01.428-.069.67.512.246.591.837 2.043.911 2.191.074.148.123.32.025.517-.099.197-.148.32-.295.492-.148.172-.31.385-.443.517-.148.148-.303.31-.131.606.172.295.766 1.264 1.644 2.046 1.129 1.006 2.081 1.318 2.376 1.466.295.148.468.123.641-.074.172-.1
