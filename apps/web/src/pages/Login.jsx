@@ -14,7 +14,7 @@ export default function Login() {
   const [step, setStep] = useState("phone");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
-  const [referral, setReferral] = useState((searchParams.get("ref") || "").toUpperCase());
+  const [referral] = useState((searchParams.get("ref") || "").toUpperCase());
   const [devOtp, setDevOtp] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -77,7 +77,6 @@ export default function Login() {
             </span>
             <span>TO</span>
             <span>LPludoplayer</span>
-            
           </h1>
 
           <p className="text-xs font-bold text-slate-500">
@@ -113,22 +112,20 @@ export default function Login() {
             <p className="text-xs font-semibold text-slate-500 text-center">
               OTP sent to +91 {phone} {devOtp && <span className="font-bold text-brand-600">(dev: {devOtp})</span>}
             </p>
+            {/* OTP Input Box with Yellow Styling */}
             <input
               inputMode="numeric"
               maxLength={6}
               placeholder="6-digit OTP"
               value={otp}
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-              className="w-full rounded-xl border border-amber-200 bg-amber-50/30 px-3.5 py-3 text-center text-xl font-bold tracking-[0.4em] text-slate-900 outline-none transition-all duration-200 placeholder:text-base placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400 focus:border-amber-400 focus:bg-white focus:ring-2 focus:ring-amber-300/40"
+              className="w-full rounded-xl border border-amber-300 bg-amber-100/60 px-3.5 py-3 text-center text-xl font-bold tracking-[0.4em] text-slate-900 outline-none transition-all duration-200 placeholder:text-base placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-500 focus:border-amber-500 focus:bg-amber-100 focus:ring-2 focus:ring-amber-400/50"
             />
-            <Input
-              placeholder="Referral code (optional)"
-              value={referral}
-              onChange={(e) => setReferral(e.target.value.toUpperCase())}
-            />
+            
+            {/* Verify Button with Green Styling */}
             <Button
               type="submit"
-              className="w-full bg-gradient-to-r from-amber-400 via-brand-500 to-amber-500 shadow-md hover:shadow-lg active:scale-95 transition-all"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-md active:scale-95 transition-all"
               loading={busy}
               disabled={otp.length !== 6}
             >
