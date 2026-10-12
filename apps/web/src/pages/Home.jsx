@@ -5,21 +5,22 @@ import { socket } from "../lib/socket.js";
 import { SectionTitle } from "../components/ui.jsx";
 
 /**
- * Home — launcher layout with referral banner and game cards.
+ * Home — launcher layout with referral banner, game cards, and floating WhatsApp support.
  */
 
-/** One game card: poster visual on top, white info footer below. */
-function GameCard({ title, subtitle, cta, image, imageAlt, onPlay, disabled = false }) {
+/** One game card: poster visual on top with badge, white info footer below. */
+function GameCard({ title, subtitle, cta, image, imageAlt, onPlay, disabled = false, badge }) {
   return (
     <article
       onClick={!disabled ? onPlay : undefined}
-      className={`overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card transition-all ${
+      className={`relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card transition-all ${
         !disabled ? "cursor-pointer hover:shadow-md" : ""
       }`}
       data-purpose="game-card"
     >
-      <div className="h-44 w-full overflow-hidden bg-gray-100">
+      <div className="relative h-44 w-full overflow-hidden bg-gray-100">
         <img src={image} alt={imageAlt} loading="lazy" className="h-full w-full object-cover" />
+        {badge && <div className="absolute top-3 right-3">{badge}</div>}
       </div>
       <div className="flex items-center justify-between gap-3 border-t border-gray-50 bg-white px-4 py-3.5">
         <div className="min-w-0 space-y-0.5">
@@ -66,7 +67,7 @@ export default function Home() {
   }, [qc]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="relative flex flex-col gap-6 pb-16">
       {/* Welcome banner with padding and top margin gap */}
       <section
         className="my-2 flex items-center justify-center rounded-xl border border-[#FAD655] bg-gradient-to-b from-[#FEF4BA] via-[#FDE88C] to-[#FCD95B] py-4 px-3 shadow-sm"
@@ -90,6 +91,12 @@ export default function Home() {
           image="/ludo-classic-manual.jpg"
           imageAlt="Classic Web Ludo poster"
           onPlay={() => navigate("/play")}
+          badge={
+            <span className="flex items-center gap-1.5 rounded-full bg-emerald-600/90 backdrop-blur-sm px-3 py-1 text-[11px] font-black uppercase text-white shadow-md animate-pulse">
+              <span className="h-2 w-2 rounded-full bg-white animate-ping" />
+              LIVE
+            </span>
+          }
         />
         <GameCard
           title="Classic Web Ludo"
@@ -98,8 +105,29 @@ export default function Home() {
           image="/lp-ludo-player.jpg"
           imageAlt="Classic App Ludo poster"
           disabled
+          badge={
+            <span className="rounded-full bg-amber-500/90 backdrop-blur-sm px-3 py-1 text-[11px] font-black uppercase text-neutral-950 shadow-md">
+              Coming Soon
+            </span>
+          }
         />
       </div>
+
+      {/* Floating WhatsApp Support Button */}
+      <a
+        href="https://wa.me/919999999999"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-20 right-4 z-50 flex flex-col items-center gap-1 transition-transform hover:scale-105 active:scale-95"
+        aria-label="WhatsApp Support"
+      >
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-xl ring-2 ring-emerald-500/50 p-1">
+          <img src="/whatsapp.png" alt="WhatsApp Support" className="h-full w-full object-contain" />
+        </div>
+        <span className="rounded-full bg-neutral-900/90 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-white shadow-md backdrop-blur-sm">
+          Support
+        </span>
+      </a>
     </div>
   );
 }
