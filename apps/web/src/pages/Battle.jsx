@@ -25,19 +25,40 @@ export default function Battle() {
   const [screenshotName, setScreenshotName] = useState("");
 
   /* -------------------------------------------------------------------------- */
-  /*                              API QUERIES                                   */
+  /*                            API QUERIES / MOCK                              */
   /* -------------------------------------------------------------------------- */
 
   // Fetch Single Contest Details for the room view
   const contestQuery = useQuery({
     queryKey: ["contest", id],
-    queryFn: () => api(`/contests/${id}`).then((r) => r.contest),
+    queryFn: async () => {
+      // If the ID matches one of our generated fake IDs, return mock data for presentation
+      if (id && id.startsWith("fake-")) {
+        const index = parseInt(id.replace("fake-", ""), 10) || 1;
+        const names = ["Rahul Sharma", "Amit Kumar", "Priya Singh", "Rohit Verma", "Ankit Gupta", "Neha Verma", "Vikas Yadav", "Deepak Kumar", "Pooja Sharma", "Sunil Kumar", "Manish Kumar", "Sandeep Singh", "Ajay Kumar", "Kiran Rao", "Vijay Kumar"];
+        const name1 = names[(index * 3) % names.length];
+        const name2 = names[(index * 7) % names.length];
+        const stakeAmount = ((index % 5) + 1) * 10000; // in paise
+        return {
+          id: id,
+          status: "running",
+          stake: stakeAmount,
+          prize: stakeAmount * 2,
+          roomCode: String(10000000 + index * 12345).slice(0, 8),
+          players: [
+            { seat: 1, userId: "u1", name: name1, isYou: false },
+            { seat: 2, userId: "u2", name: name2, isYou: true },
+          ],
+        };
+      }
+      return api(`/contests/${id}`).then((r) => r.contest);
+    },
     enabled: Boolean(id),
     refetchInterval: 15_000,
   });
 
   /* -------------------------------------------------------------------------- */
-  /*                         WEBSOCKET LISTENERS                                */
+  /*                            WEBSOCKET LISTENERS                             */
   /* -------------------------------------------------------------------------- */
   useEffect(() => {
     if (!socket.connected) socket.connect();
@@ -46,7 +67,6 @@ export default function Battle() {
       if (id) {
         socket.emit("watch:contest", { contestId: id }, () => {});
       } else {
-        // lobby view: subscribe to the open-battles room for live list changes
         socket.emit("subscribe:contests", {}, () => {});
       }
     }
@@ -82,7 +102,7 @@ export default function Battle() {
   }, [contestQuery.isError, navigate, toast]);
 
   /* -------------------------------------------------------------------------- */
-  /*                              ACTION HANDLERS                               */
+  /*                            ACTION HANDLERS                                 */
   /* -------------------------------------------------------------------------- */
   async function run(action, fn, okMessage) {
     setBusy(action);
@@ -102,46 +122,47 @@ export default function Battle() {
     }
   }
 
-  // Join Battle Action (sends a join request — no amount is locked yet)
   const join = (targetId = id) =>
     run(
       "join",
       async () => {
+        if (targetId.startsWith("fake-")) {
+          navigate(`/battle/${targetId}`);
+          return;
+        }
         await api(`/contests/${targetId}/join`, { method: "POST" });
         if (targetId !== id) navigate(`/battle/${targetId}`);
       },
       "Join request sent — waiting for the creator to accept"
     );
 
-  // Accept Join Request Action (creator starts the match; both stakes lock here)
   const accept = (targetId = id) =>
     run(
       "accept",
-      () => api(`/contests/${targetId}/accept`, { method: "POST" }),
+      () => (targetId.startsWith("fake-") ? Promise.resolve() : api(`/contests/${targetId}/accept`, { method: "POST" })),
       "Battle started!"
     );
 
-  // Reject Join Request Action (creator declines — the battle reopens)
   const rejectJoin = (targetId = id) =>
     run(
       "reject",
-      () => api(`/contests/${targetId}/reject`, { method: "POST" }),
+      () => (targetId.startsWith("fake-") ? Promise.resolve() : api(`/contests/${targetId}/reject`, { method: "POST" })),
       "Join request declined"
     );
 
-  // Submit Room Code Action
   const submitRoom = () =>
     run(
       "room",
       () =>
-        api(`/contests/${id}/room`, {
-          method: "POST",
-          body: { roomCode: roomCode.trim().toUpperCase() },
-        }),
+        id.startsWith("fake-")
+          ? Promise.resolve()
+          : api(`/contests/${id}/room`, {
+              method: "POST",
+              body: { roomCode: roomCode.trim().toUpperCase() },
+            }),
       "Room code shared!"
     );
 
-  // Submit Result Action
   const submitResultReport = () => {
     if (!outcome) return;
     if (outcome === "won" && !screenshot) {
@@ -157,21 +178,22 @@ export default function Battle() {
           const { key } = await apiUpload("/uploads", compressed, "battle");
           screenshotKeys = [key];
         }
-        await api(`/contests/${id}/result`, {
-          method: "POST",
-          body: { outcome, screenshotKeys },
-        });
+        if (!id.startsWith("fake-")) {
+          await api(`/contests/${id}/result`, {
+            method: "POST",
+            body: { outcome, screenshotKeys },
+          });
+        }
         setReported(outcome);
       },
       outcome === "cancel" ? "Cancellation requested" : "Result reported successfully!"
     );
   };
 
-  // Cancel Battle Action
   const cancelBattle = (targetId = id) =>
     run(
       "cancel",
-      () => api(`/contests/${targetId}/cancel`, { method: "POST" }),
+      () => (targetId.startsWith("fake-") ? Promise.resolve() : api(`/contests/${targetId}/cancel`, { method: "POST" })),
       "Battle cancelled — amount refunded"
     );
 
@@ -182,7 +204,7 @@ export default function Battle() {
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                 1. BATTLE ROOM VIEW (When Route has :id)                   */
+  /*                  1. BATTLE ROOM VIEW (When Route has :id)                  */
   /* -------------------------------------------------------------------------- */
   if (id) {
     if (contestQuery.isLoading) {
@@ -202,7 +224,6 @@ export default function Battle() {
     const isCreator = Boolean(c.players?.find((p) => p.seat === 1)?.isYou);
     const winner = c.winnerUserId ? c.players?.find((p) => String(p.userId) === String(c.winnerUserId)) : null;
     const youWon = Boolean(winner && winner.isYou);
-    // has THIS player already filed their result? (the other player may still submit)
     const myReport = Boolean((c.resultReports || []).some((r) => String(r.userId) === String(me?.userId)));
     const resultOpen = ["running", "room_submitted", "result_submitted", "cancel_requested"].includes(c.status);
 
@@ -282,7 +303,6 @@ export default function Battle() {
           </Panel>
         )}
 
-        {/* Join request — the creator accepts to start (and lock both stakes) */}
         {c.status === "join_requested" && (
           <Panel title={isCreator ? "Opponent Found" : "Join Requested"}>
             {isCreator ? (
@@ -305,7 +325,7 @@ export default function Battle() {
           </Panel>
         )}
 
-        {/* Room Code — moved up to where the Players block used to be */}
+        {/* Room Code */}
         {(c.status === "running" || c.status === "room_submitted" || c.status === "result_submitted") && inBattle && (
           <Panel title="Room Code">
             {c.roomCode ? (
@@ -351,8 +371,7 @@ export default function Battle() {
           </ul>
         </Panel>
 
-        {/* Result Submission — any player who hasn't filed yet can submit, even
-            after the opponent already did (status result_submitted / cancel_requested) */}
+        {/* Result Submission */}
         {inBattle && !myReport && resultOpen && (
           <Panel title="Report Match Result">
             <div className="space-y-3">
@@ -380,14 +399,12 @@ export default function Battle() {
                 </button>
               </div>
 
-              {/* only a win claim needs proof — a loss needs no screenshot */}
               {outcome === "won" && (
                 <div className="flex items-center justify-between rounded-xl border border-gray-200 p-3 bg-gray-50">
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold uppercase text-slate-400">Winning screenshot (required)</p>
                     <p className="truncate text-xs font-bold text-slate-700">{screenshotName || "No file chosen"}</p>
                   </div>
-                  {/* a label wrapping the input opens the native picker on every mobile browser */}
                   <label className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-gray-100 px-4 py-2 text-xs font-extrabold text-slate-700 transition-all hover:bg-gray-200 active:scale-95">
                     {screenshot ? "Replace" : "Upload"}
                     <input
@@ -416,14 +433,12 @@ export default function Battle() {
           </Panel>
         )}
 
-        {/* already filed — waiting on the opponent / admin */}
         {inBattle && myReport && resultOpen && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-sm font-bold text-amber-700">
             Your result is submitted — waiting for the other player / admin.
           </div>
         )}
 
-        {/* Back Link */}
         <div className="text-center pt-2">
           <button type="button" onClick={() => navigate("/battle")} className="text-xs font-extrabold text-slate-500 hover:underline">
             ← Back to Battles Lobby
@@ -433,8 +448,59 @@ export default function Battle() {
     );
   }
 
-  // No :id → the bare /battle route was removed (App redirects /battle → /play).
-  return <Navigate to="/play" replace />;
+  /* -------------------------------------------------------------------------- */
+  /*          2. BATTLES LOBBY VIEW (List of 15 Fake Running Battles)           */
+  /* -------------------------------------------------------------------------- */
+  const fakeBattles = Array.from({ length: 15 }, (_, i) => {
+    const idNum = i + 1;
+    const names = ["Rahul Sharma", "Amit Kumar", "Priya Singh", "Rohit Verma", "Ankit Gupta", "Neha Verma", "Vikas Yadav", "Deepak Kumar", "Pooja Sharma", "Sunil Kumar", "Manish Kumar", "Sandeep Singh", "Ajay Kumar", "Kiran Rao", "Vijay Kumar"];
+    const name1 = names[(i * 3) % names.length];
+    const name2 = names[(i * 7) % names.length];
+    const stakeAmount = ((i % 5) + 1) * 10000; // e.g. ₹100, ₹200, ₹300, ₹400, ₹500
+    return {
+      id: `fake-${idNum}`,
+      status: "running",
+      stake: stakeAmount,
+      prize: stakeAmount * 2,
+      players: [
+        { seat: 1, name: name1 },
+        { seat: 2, name: name2 },
+      ],
+    };
+  });
+
+  return (
+    <div className="max-w-md mx-auto p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-black tracking-tight text-slate-900">Live Running Battles</h2>
+        <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700 animate-pulse">15 Active</span>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        {fakeBattles.map((b) => (
+          <div key={b.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+                <span className="text-xs font-extrabold text-slate-700">{b.players[0].name} vs {b.players[1].name}</span>
+              </div>
+              <StatusBadge status={b.status} />
+            </div>
+
+            <div className="flex items-center justify-between border-t border-gray-50 pt-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase text-slate-400">Entry / Prize</p>
+                <p className="text-sm font-black text-slate-900">{formatPaise(b.stake)} <span className="text-emerald-600 font-bold">({formatPaise(b.prize)})</span></p>
+              </div>
+              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold" onClick={() => navigate(`/battle/${b.id}`)}>
+                Watch / View
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /** one side of the battle header — avatar (real or generated) + name */
