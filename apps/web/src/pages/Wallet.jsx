@@ -382,18 +382,15 @@ const Battle = ({ setActiveTab }) => {
 
   return (
     <div className="relative min-h-screen bg-gradient-to-b from-amber-50/50 via-white to-amber-50/20 px-4 pb-28 pt-4 text-slate-950">
-      {/* Background Ambient Glow Accents */}
       <div className="pointer-events-none absolute -top-10 -left-10 h-48 w-48 rounded-full bg-amber-200/40 blur-3xl" />
       <div className="pointer-events-none absolute top-1/3 -right-10 h-48 w-48 rounded-full bg-yellow-300/30 blur-3xl" />
 
       <div className="relative z-10 mx-auto max-w-md space-y-4">
-        {/* Notice Box */}
         <div className="relative overflow-hidden rounded-2xl border border-amber-300/80 bg-gradient-to-r from-amber-100/90 via-amber-50 to-yellow-100/90 px-4 py-3 text-center text-xs font-bold text-amber-950 shadow-sm">
           <span className="absolute -right-4 -bottom-4 text-4xl opacity-15 select-none" aria-hidden="true">🎲</span>
           👉दोस्तों Battle Ludo 🎲. कभी आपका भरोसा नहीं तोड़ेगा , 24×7 Withdrawal चालू रहता है 👈
         </div>
 
-        {/* Create Battle Box */}
         <div className="rounded-3xl border border-amber-200/80 bg-white/90 p-4 shadow-xl backdrop-blur-md">
           <div className="flex items-center justify-between mb-3 px-2">
             <h2 className="text-xs font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
@@ -428,7 +425,6 @@ const Battle = ({ setActiveTab }) => {
           </div>
         </div>
 
-        {/* Open Battles Section */}
         <SectionTitle title="Open Battles" />
 
         <div className="space-y-3">
@@ -446,7 +442,6 @@ const Battle = ({ setActiveTab }) => {
 
         <div className="my-2 h-[2px] w-full bg-gradient-to-r from-transparent via-amber-200 to-transparent" />
 
-        {/* Running Battles Section */}
         <SectionTitle title="Running Battles" />
 
         <div className="space-y-3">
