@@ -418,24 +418,26 @@ export default function Wallet() {
         </TabsPanel>
 
         <TabsPanel match={tab} value="withdraw">
-          <Panel title="Withdraw funds" className="border-amber-200 bg-amber-50/70">
+          <Panel title="Withdraw funds" className="border-amber-300 bg-gradient-to-b from-amber-50/95 via-white to-amber-50/60 shadow-xl rounded-3xl">
             {kycVerified ? (
-              <div className="space-y-3">
+              <div className="space-y-3.5">
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <Bucket label="Balance" paise={wallet.data?.balancePaise} />
                   <Bucket label="Bonus" paise={wallet.data?.bonusPaise} />
                   <Bucket label="Winnings" paise={wallet.data?.winningsPaise} highlight />
                 </div>
-                <p className="text-[11px] font-bold text-emerald-700">
+                <p className="text-[11px] font-bold text-emerald-700 px-1">
                   Withdrawable (winnings): {formatPaise(winningsPaise)}
                 </p>
 
+                {/* Amount Input with Yellow Background */}
                 <Input
                   label="Amount (₹)"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="200"
                   inputMode="decimal"
+                  className="border-amber-400 bg-amber-100/90 text-slate-950 font-black focus:bg-amber-100"
                   hint="Minimum ₹200 · up to ₹2000 via UPI"
                 />
 
@@ -444,8 +446,10 @@ export default function Wallet() {
                     type="button"
                     disabled={bankRequired}
                     onClick={() => setMethod("upi")}
-                    className={`flex-1 rounded-xl border py-2 text-xs font-bold transition-colors disabled:opacity-50 ${
-                      effectiveMethod === "upi" ? "border-slate-800 bg-white text-slate-900" : "border-amber-200 bg-white/60 text-slate-500"
+                    className={`flex-1 rounded-2xl border py-2.5 text-xs font-black transition-all disabled:opacity-50 ${
+                      effectiveMethod === "upi"
+                        ? "border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-500/20"
+                        : "border-amber-200 bg-amber-50 text-slate-700 hover:bg-amber-100"
                     }`}
                   >
                     UPI
@@ -453,8 +457,10 @@ export default function Wallet() {
                   <button
                     type="button"
                     onClick={() => setMethod("bank")}
-                    className={`flex-1 rounded-xl border py-2 text-xs font-bold transition-colors ${
-                      effectiveMethod === "bank" ? "border-slate-800 bg-white text-slate-900" : "border-amber-200 bg-white/60 text-slate-500"
+                    className={`flex-1 rounded-2xl border py-2.5 text-xs font-black transition-all ${
+                      effectiveMethod === "bank"
+                        ? "border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-500/20"
+                        : "border-amber-200 bg-amber-50 text-slate-700 hover:bg-amber-100"
                     }`}
                   >
                     Bank
@@ -467,26 +473,26 @@ export default function Wallet() {
                     value={upiId}
                     onChange={(e) => setUpiId(e.target.value)}
                     placeholder="name@bank"
+                    className="border-amber-300 bg-white"
                   />
                 ) : (
-                  <>
-                    <Input label="Account holder name" value={bank.accountName} onChange={(e) => setBank({ ...bank, accountName: e.target.value })} placeholder="Full name" />
-                    <Input label="Account number" value={bank.accountNumber} inputMode="numeric" onChange={(e) => setBank({ ...bank, accountNumber: e.target.value.replace(/\D/g, "") })} placeholder="Account number" />
-                    <Input label="IFSC code" value={bank.ifsc} onChange={(e) => setBank({ ...bank, ifsc: e.target.value.toUpperCase() })} placeholder="ABCD0123456" />
-                  </>
+                  <div className="space-y-3 rounded-2xl border border-amber-200/80 bg-amber-50/50 p-3">
+                    <Input label="Account holder name" value={bank.accountName} onChange={(e) => setBank({ ...bank, accountName: e.target.value })} placeholder="Full name" className="border-amber-300 bg-white" />
+                    <Input label="Account number" value={bank.accountNumber} inputMode="numeric" onChange={(e) => setBank({ ...bank, accountNumber: e.target.value.replace(/\D/g, "") })} placeholder="Account number" className="border-amber-300 bg-white" />
+                    <Input label="IFSC code" value={bank.ifsc} onChange={(e) => setBank({ ...bank, ifsc: e.target.value.toUpperCase() })} placeholder="ABCD0123456" className="border-amber-300 bg-white" />
+                  </div>
                 )}
 
                 <Button
-                  className="w-full"
+                  className="w-full rounded-full bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 py-3 text-xs font-black text-neutral-950 shadow-lg shadow-amber-500/25 hover:brightness-105"
                   onClick={submitWithdraw}
                   loading={busy}
                   disabled={!amount || (effectiveMethod === "upi" ? !upiId.trim() : !(bank.accountName && bank.accountNumber && bank.ifsc))}
                 >
                   Request withdrawal
                 </Button>
-                <p className="text-[11px] text-slate-600">
-                  Only winnings can be withdrawn. Above ₹2000 a bank transfer is required. The amount is put on hold
-                  immediately and paid out by an admin.
+                <p className="text-[11px] text-slate-600 px-1">
+                  Only winnings can be withdrawn. Above ₹2000 a bank transfer is required. The amount is put on hold immediately and paid out by an admin.
                 </p>
               </div>
             ) : (
