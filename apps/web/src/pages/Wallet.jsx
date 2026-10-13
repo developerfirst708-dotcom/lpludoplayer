@@ -217,7 +217,12 @@ export default function Wallet() {
         accountNumber: bank.accountNumber.trim(),
         ifsc: bank.ifsc.trim().toUpperCase(),
       };
-      if (!b.accountName || !/^\d{6,20}$/.test(b.accountNumber) \vert{}\vert{} !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(b.ifsc)) {
+      
+      const hasNoName = !b.accountName;
+      const hasBadAcc = !/^\d{6,20}$/.test(b.accountNumber);
+      const hasBadIfsc = !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(b.ifsc);
+
+      if (hasNoName || hasBadAcc || hasBadIfsc) {
         toast.error("Enter valid bank details");
         return;
       }
