@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { api, apiUpload } from "../lib/api.js";
 import compressImage from "../lib/compressImage.js";
 import { socket } from "../lib/socket.js";
@@ -41,6 +41,7 @@ async function triggerDepositNotification(title, body) {
 
 export default function Wallet() {
   const toast = useToast();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [tab, setTab] = useState("deposit");
   const [amount, setAmount] = useState("");
@@ -322,18 +323,42 @@ export default function Wallet() {
                 }
               />
 
-              {/* Quick Preset Amounts Buttons Below Box with Green Theme */}
-              <div className="flex gap-2">
-                {[200, 500, 1000, 2000, 5000, 10K].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setAmount(String(preset))}
-                    className="flex-1 rounded-2xl border border-emerald-400 bg-gradient-to-r from-emerald-500 via-emerald-600 to-green-600 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-500/25 transition-all hover:brightness-105 active:scale-95"
-                  >
-                    +₹{preset}
-                  </button>
-                ))}
+              {/* Quick Preset Amounts Buttons - Two Rows of 4 Buttons */}
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  {[
+                    { label: "+₹100", val: 100 },
+                    { label: "+₹250", val: 250 },
+                    { label: "+₹500", val: 500 },
+                    { label: "+₹1000", val: 1000 },
+                  ].map((item) => (
+                    <button
+                      key={item.val}
+                      type="button"
+                      onClick={() => setAmount(String(item.val))}
+                      className="flex-1 rounded-2xl border border-emerald-400 bg-gradient-to-r from-emerald-500 via-emerald-600 to-green-600 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-500/25 transition-all hover:brightness-105 active:scale-95"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  {[
+                    { label: "+₹2000", val: 2000 },
+                    { label: "+₹5000", val: 5000 },
+                    { label: "+₹10k", val: 10000 },
+                    { label: "+₹50k", val: 50000 },
+                  ].map((item) => (
+                    <button
+                      key={item.val}
+                      type="button"
+                      onClick={() => setAmount(String(item.val))}
+                      className="flex-1 rounded-2xl border border-emerald-400 bg-gradient-to-r from-emerald-500 via-emerald-600 to-green-600 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-500/25 transition-all hover:brightness-105 active:scale-95"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {g?.gatewayEnabled && gatewayPaise === null && (
@@ -441,6 +466,44 @@ export default function Wallet() {
                   hint="Minimum ₹200 · up to ₹2000 via UPI"
                 />
 
+                {/* Quick Preset Amounts Buttons - Two Rows of 4 Buttons */}
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    {[
+                      { label: "₹100", val: 100 },
+                      { label: "₹250", val: 250 },
+                      { label: "₹500", val: 500 },
+                      { label: "₹1000", val: 1000 },
+                    ].map((item) => (
+                      <button
+                        key={item.val}
+                        type="button"
+                        onClick={() => setAmount(String(item.val))}
+                        className="flex-1 rounded-2xl border border-emerald-400 bg-gradient-to-r from-emerald-500 via-emerald-600 to-green-600 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-500/25 transition-all hover:brightness-105 active:scale-95"
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    {[
+                      { label: "₹2000", val: 2000 },
+                      { label: "₹5000", val: 5000 },
+                      { label: "₹10k", val: 10000 },
+                      { label: "₹50k", val: 50000 },
+                    ].map((item) => (
+                      <button
+                        key={item.val}
+                        type="button"
+                        onClick={() => setAmount(String(item.val))}
+                        className="flex-1 rounded-2xl border border-emerald-400 bg-gradient-to-r from-emerald-500 via-emerald-600 to-green-600 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-500/25 transition-all hover:brightness-105 active:scale-95"
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -496,7 +559,15 @@ export default function Wallet() {
                 </p>
               </div>
             ) : (
-              <Empty title="KYC required" hint="Open KYC Verification from your Profile to unlock withdrawals." />
+              <div className="space-y-3 py-2">
+                <Empty title="KYC required" hint="Open KYC Verification from your Profile to unlock withdrawals." />
+                <Button
+                  className="w-full rounded-full bg-gradient-to-r from-emerald-500 via-emerald-600 to-green-600 py-3 text-xs font-black text-white shadow-md shadow-emerald-500/25 hover:brightness-105"
+                  onClick={() => navigate("/profile")}
+                >
+                  Complete KYC
+                </Button>
+              </div>
             )}
           </Panel>
         </TabsPanel>
