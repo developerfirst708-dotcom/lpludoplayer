@@ -466,44 +466,6 @@ export default function Wallet() {
                   hint="Minimum ₹200 · up to ₹2000 via UPI"
                 />
 
-                {/* Quick Preset Amounts Buttons - Two Rows of 4 Buttons */}
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    {[
-                      { label: "₹100", val: 100 },
-                      { label: "₹250", val: 250 },
-                      { label: "₹500", val: 500 },
-                      { label: "₹1000", val: 1000 },
-                    ].map((item) => (
-                      <button
-                        key={item.val}
-                        type="button"
-                        onClick={() => setAmount(String(item.val))}
-                        className="flex-1 rounded-2xl border border-emerald-400 bg-gradient-to-r from-emerald-500 via-emerald-600 to-green-600 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-500/25 transition-all hover:brightness-105 active:scale-95"
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    {[
-                      { label: "₹2000", val: 2000 },
-                      { label: "₹5000", val: 5000 },
-                      { label: "₹10k", val: 10000 },
-                      { label: "₹50k", val: 50000 },
-                    ].map((item) => (
-                      <button
-                        key={item.val}
-                        type="button"
-                        onClick={() => setAmount(String(item.val))}
-                        className="flex-1 rounded-2xl border border-emerald-400 bg-gradient-to-r from-emerald-500 via-emerald-600 to-green-600 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-500/25 transition-all hover:brightness-105 active:scale-95"
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 <div className="flex gap-2">
                   <button
                     type="button"
