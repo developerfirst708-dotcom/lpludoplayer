@@ -313,20 +313,17 @@ export default function Wallet() {
                 </p>
               )}
 
-              {/* Custom styled Input Box with Yellow Background */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-black uppercase tracking-wide text-amber-900">Amount (₹)</label>
-                <input
-                  type="number"
+              {/* Amount Input Component styled with yellow background container */}
+              <div className="rounded-2xl border-2 border-amber-400 bg-amber-100/90 p-3 shadow-inner space-y-1">
+                <Input
+                  label="Amount (₹)"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="Enter Amount"
                   inputMode="decimal"
-                  min="50"
-                  step="50"
-                  className="w-full rounded-2xl border-2 border-amber-400 bg-amber-100/90 px-4 py-3 text-sm font-black text-slate-950 shadow-inner outline-none transition-all placeholder:text-amber-700/60 focus:border-amber-500 focus:bg-amber-100"
+                  className="bg-amber-50 font-black text-slate-950"
                 />
-                <p className="text-[11px] font-bold text-amber-900/70 px-1">
+                <p className="text-[11px] font-bold text-amber-900 px-1">
                   {g
                     ? `Min ${formatPaise(g.minPaise)} · Max ${formatPaise(g.maxPaise)} · Must be multiple of ₹50${
                         g.gatewayEnabled ? ` · instant under ${formatPaise(g.gatewayThresholdPaise)}` : ""
@@ -336,7 +333,7 @@ export default function Wallet() {
               </div>
 
               {/* Quick Preset Amounts Buttons Below Box with Green Theme */}
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2">
                 {[200, 500, 1000, 2000].map((preset) => (
                   <button
                     key={preset}
@@ -479,7 +476,7 @@ export default function Wallet() {
                     label="Your UPI ID"
                     value={upiId}
                     onChange={(e) => setUpiId(e.target.value)}
-                    placeholder="Enter UPI"
+                    placeholder="name@bank"
                   />
                 ) : (
                   <>
