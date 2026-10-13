@@ -33,6 +33,46 @@ const ACTIVE_STATUSES = ["join_requested", "running", "room_submitted", "result_
 // join request (join_requested) stays in the Open list until the creator accepts
 const RUNNING_STATUSES = ["running", "room_submitted", "result_submitted", "cancel_requested"];
 
+/* -----------------------------------------------------------------------
+ * UI-only demo battles for the "Running Battles" section (no DB writes).
+ * They make the lobby look alive. Each has a different stake and realistic
+ * player names, staggered a few minutes apart. `isYou:false` on both players
+ * means they render with the spinner (a "not your match" look) — and clicking
+ * one just shows a friendly notice instead of routing to a fake room.
+ * --------------------------------------------------------------------- */
+// Real players' `name` is a random 5-letter code (e.g. VLGBM, UDWFK, QJQAG), and
+// that is exactly what real running battles show (no full names there — those are
+// only used for dummy Open battles). So the demo battles use the same code style.
+const FAKE_RUNNING_BATTLES = [
+  // [minutesAgo, stake(paise), creator, opponent]
+  [4, 10000, "UDWFK", "QJQAG"],
+  [11, 50000, "BLMLW", "URRZQ"],
+  [19, 20000, "KLHQY", "YSXXZ"],
+  [26, 100000, "FRMBL", "ZREWH"],
+  [33, 25000, "VETQQ", "WUAPG"],
+  [41, 5000, "DNJAT", "UGGTV"],
+  [48, 150000, "RKTBH", "CVCDA"],
+  [56, 30000, "TMCPT", "LRZPJ"],
+  [64, 80000, "NRXSN", "UKAAQ"],
+  [72, 15000, "JHYTD", "MORVG"],
+  [81, 200000, "PGSLK", "XCVBN"],
+  [89, 300000, "RYTUE", "ASDFG"],
+  [97, 500000, "HJKLQ", "ZXCVB"],
+  [104, 750000, "ERTYU", "QWERT"],
+  [112, 1000000, "TREWV", "PLMOK"],
+].map(([minsAgo, stake, creator, opponent], i) => ({
+  id: `demo-${i + 1}`,
+  status: "running",
+  stake,
+  createdAt: new Date(Date.now() - minsAgo * 60_000).toISOString(),
+  players: [
+    { seat: 1, name: creator, isYou: false },
+    { seat: 2, name: opponent, isYou: false },
+  ],
+}));
+
+const isDemo = (id) => String(id).startsWith("demo-");
+
 const creatorOf = (c) => c?.players?.find((p) => p.seat === 1) || null;
 const opponentOf = (c) => c?.players?.find((p) => p.seat === 2) || null;
 const isMine = (c) => Boolean(c?.players?.some((p) => p.isYou));
@@ -123,8 +163,12 @@ export default function Play() {
       return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
     });
 
-    return real;
-  }, [myBattles]);
+    // wait for the first real load so the fake list doesn't fight the skeletons
+    if (mine.data === undefined) return real;
+
+    // demo battles fill the rest of the list (after any real ones)
+    return [...real, ...FAKE_RUNNING_BATTLES];
+  }, [myBattles, mine.data]);
 
   const previewPaise = useMemo(() => {
     const amt = Number(betstake);
@@ -388,7 +432,13 @@ export default function Play() {
             <MatchCard
               key={c.id}
               battle={c}
-              onClick={() => navigate(`/battle/${c.id}`)}
+              onClick={() => {
+                if (isDemo(c.id)) {
+                  toast.info("This is a demo battle — start your own to play!");
+                  return;
+                }
+                navigate(`/battle/${c.id}`);
+              }}
             />
           ))}
         </div>

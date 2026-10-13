@@ -183,16 +183,22 @@ function FloatingWhatsApp() {
   const waLink = `https://wa.me/${number.replace(/^\+/, "")}?text=${encodeURIComponent("Hello LPLUDO support, I need help with my account.")}`;
 
   return (
-    <a
-      href={waLink}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label="Chat with us on WhatsApp"
-      title="Chat with us on WhatsApp"
-      className="absolute bottom-20 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-xl shadow-emerald-900/25 ring-2 ring-white transition-transform hover:scale-105 active:scale-95"
-    >
-      <WhatsAppIcon className="h-7 w-7" />
-    </a>
+    // fixed to the viewport (never scrolls away) but aligned to the right edge
+    // of the centered 430px app column — same centering trick as BottomNav
+    <div className="pointer-events-none fixed inset-x-0 bottom-20 z-30 flex justify-center">
+      <div className="pointer-events-auto w-full max-w-[430px] px-4">
+        <a
+          href={waLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Chat with us on WhatsApp"
+          title="Chat with us on WhatsApp"
+          className="ml-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-xl shadow-emerald-900/25 ring-2 ring-white transition-transform hover:scale-105 active:scale-95"
+        >
+          <WhatsAppIcon className="h-7 w-7" />
+        </a>
+      </div>
+    </div>
   );
 }
 
