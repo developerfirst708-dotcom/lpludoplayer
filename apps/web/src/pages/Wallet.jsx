@@ -324,7 +324,7 @@ export default function Wallet() {
 
               {/* Quick Preset Amounts Buttons Below Box with Green Theme */}
               <div className="flex gap-2">
-                {[200, 500, 1000, 2000].map((preset) => (
+                {[200, 500, 1000, 2000, 5000, 10K].map((preset) => (
                   <button
                     key={preset}
                     type="button"
