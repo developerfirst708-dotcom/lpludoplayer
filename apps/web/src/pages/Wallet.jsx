@@ -149,7 +149,6 @@ export default function Wallet() {
 
     setBusy(true);
     try {
-      // upload the proof first, then claim with its key (key is required server-side)
       const compressed = await compressImage(proof);
       const { key } = await apiUpload("/uploads", compressed, "deposit");
       await api("/payments/deposit", { method: "POST", body: { amountPaise: paise, utr: utr.trim(), proofImageKey: key } });
@@ -179,11 +178,6 @@ export default function Wallet() {
     setProofName(file.name);
   }
 
-  /**
-   * Instant UPI: the API creates the order and hands back the hosted checkout
-   * URL. We send the browser there; when it comes back the page shows the
-   * verifying card. The wallet is credited by the backend, never the client.
-   */
   async function submitGatewayDeposit() {
     const paise = toPaise(amount);
     if (paise === null) {
@@ -191,7 +185,6 @@ export default function Wallet() {
       return;
     }
 
-    // Check multiple of ₹50 (5000 paise)
     if (paise % 5000 !== 0) {
       const errMsg = "Deposit amount must be in multiples of ₹50!";
       toast.error(errMsg);
@@ -209,7 +202,7 @@ export default function Wallet() {
       );
 
       if (res.paymentUrl) {
-        window.location.href = res.paymentUrl; // hosted checkout (QR + UPI apps)
+        window.location.href = res.paymentUrl;
       } else {
         toast.error("Could not open the payment page");
       }
@@ -224,7 +217,6 @@ export default function Wallet() {
     const paise = toPaise(amount);
     if (paise === null) return;
 
-    // > ₹2000 must go to a bank account (reference rule)
     const bankRequired = paise > 200000;
     const finalMethod = bankRequired ? "bank" : method;
     const body = { amountPaise: paise, method: finalMethod };
@@ -238,7 +230,7 @@ export default function Wallet() {
         accountNumber: bank.accountNumber.trim(),
         ifsc: bank.ifsc.trim().toUpperCase(),
       };
-      if (!b.accountName || !/^\d{6,20}$/.test(b.accountNumber) || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(b.ifsc)) {
+      if (!b.accountName || !/^\d{6,20}$/.test(b.accountNumber) \vert{}\vert{} !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(b.ifsc)) {
         toast.error("Enter valid bank details");
         return;
       }
@@ -283,16 +275,13 @@ export default function Wallet() {
     return <Empty title="Wallet unavailable" hint={wallet.error?.message} />;
   }
 
-  // hybrid rail selection: instant gateway under the threshold, manual UPI + UTR at/above it
   const g = details.data;
   const gatewayPaise = safePaise(amount);
   const gatewayMode = Boolean(g?.gatewayEnabled) && gatewayPaise !== null && gatewayPaise < g.gatewayThresholdPaise;
   const showManualForm = Boolean(g) && (!g.gatewayEnabled || (gatewayPaise !== null && !gatewayMode));
 
-  // Filter history to display ONLY deposits and withdrawals
   const filteredHistory = (history.data?.items || []).filter((item) => DISPLAY_TYPES.includes(item.type));
 
-  // withdraw rail: only winnings are withdrawable; > ₹2000 must be a bank transfer
   const winningsPaise = wallet.data?.winningsPaise ?? 0;
   const withdrawPaise = safePaise(amount);
   const bankRequired = withdrawPaise !== null && withdrawPaise > 200000;
@@ -308,13 +297,14 @@ export default function Wallet() {
         </TabsList>
 
         <TabsPanel match={tab} value="deposit">
-          <Panel title="Add funds" className="border-amber-200 bg-amber-50/70">
+          {/* Colorful Ludo Themed Add Funds Panel */}
+          <Panel title="Add funds" className="border-amber-300 bg-gradient-to-b from-amber-50/90 via-white to-amber-50/40 shadow-xl">
             <div className="space-y-3">
               {depositId && <GatewayDepositCard depositId={depositId} onClose={closeDepositCard} />}
 
               {/* Deposit UPI Policy Notice Box */}
-              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-center text-xs font-bold text-red-700 shadow-sm">
-                जिस UPI से Deposit होगा उसी UPI पर Withdraw होगा !
+              <div className="rounded-2xl border border-rose-300 bg-gradient-to-r from-rose-50 to-orange-50 p-3.5 text-center text-xs font-black text-rose-700 shadow-md">
+                👉 जिस UPI से Deposit होगा उसी UPI पर Withdraw होगा ! 👈
               </div>
 
               {g?.gatewayUnavailable && !gatewayMode && (
@@ -338,14 +328,14 @@ export default function Wallet() {
                 }
               />
 
-              {/* Quick amounts in multiples of 50 */}
+              {/* Updated Preset amounts: 200, 500, 1000, 2000 */}
               <div className="flex gap-2">
-                {[50, 100, 250, 500].map((preset) => (
+                {[200, 500, 1000, 2000].map((preset) => (
                   <button
                     key={preset}
                     type="button"
                     onClick={() => setAmount(String(preset))}
-                    className="flex-1 rounded-xl border border-amber-200 bg-white py-1.5 text-xs font-bold text-slate-700 transition-all hover:border-brand-500/50 active:scale-95"
+                    className="flex-1 rounded-xl border border-amber-300 bg-gradient-to-br from-amber-100/60 to-yellow-50 py-2 text-xs font-black text-amber-900 shadow-sm transition-all hover:border-amber-400 hover:shadow active:scale-95"
                   >
                     +₹{preset}
                   </button>
@@ -363,7 +353,7 @@ export default function Wallet() {
               {gatewayMode && (
                 <>
                   <Button
-                    className="w-full"
+                    className="w-full bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 text-neutral-950 font-black shadow-md hover:brightness-105"
                     onClick={submitGatewayDeposit}
                     loading={busy}
                   >
@@ -379,15 +369,15 @@ export default function Wallet() {
               )}
 
               {showManualForm && (
-                <div className="space-y-3 border-t border-amber-200/80 pt-3">
+                <div className="space-y-3 border-t border-amber-200 pt-3">
                   {g?.upiId && (
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-[#FAD655] bg-[#FEF4BA]/90 px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#FAD655] bg-gradient-to-r from-[#FEF4BA] via-[#FDE88C] to-[#FCD95B] px-4 py-3 shadow-md">
                       <div className="min-w-0">
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-amber-700">Pay to</p>
-                        <p className="truncate font-mono text-sm font-black text-slate-800">{g.upiId}</p>
-                        <p className="text-[11px] font-semibold text-slate-500">{g.upiName}</p>
+                        <p className="text-[11px] font-black uppercase tracking-wide text-amber-900">Pay to</p>
+                        <p className="truncate font-mono text-sm font-black text-slate-900">{g.upiId}</p>
+                        <p className="text-[11px] font-extrabold text-slate-700">{g.upiName}</p>
                       </div>
-                      <Button variant="ghost" className="shrink-0 px-3 py-2 text-xs" onClick={copyUpi}>
+                      <Button variant="ghost" className="shrink-0 rounded-full bg-white/80 px-4 py-2 text-xs font-black shadow-sm hover:bg-white" onClick={copyUpi}>
                         Copy
                       </Button>
                     </div>
@@ -399,13 +389,13 @@ export default function Wallet() {
                     placeholder="XXXXXXXXXXXX"
                   />
 
-                  {/* payment screenshot — required (admin verifies it) */}
-                  <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-white p-3">
+                  {/* payment screenshot */}
+                  <div className="flex items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3.5 shadow-sm">
                     <div className="min-w-0">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Payment screenshot (required)</p>
+                      <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Payment screenshot (required)</p>
                       <p className="truncate text-xs font-bold text-slate-700">{proofName || "No file chosen"}</p>
                     </div>
-                    <label className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-gray-100 px-4 py-2 text-xs font-extrabold text-slate-700 transition-all hover:bg-gray-200 active:scale-95">
+                    <label className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-amber-400 px-4 py-2 text-xs font-black text-neutral-950 shadow-sm transition-all hover:bg-amber-500 active:scale-95">
                       {proof ? "Replace" : "Upload"}
                       <input
                         type="file"
@@ -417,7 +407,7 @@ export default function Wallet() {
                   </div>
 
                   <Button
-                    className="w-full"
+                    className="w-full bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 text-neutral-950 font-black shadow-md hover:brightness-105"
                     onClick={submitDeposit}
                     loading={busy}
                     disabled={!amount || utr.trim().length < 6 || !proof}
@@ -437,7 +427,6 @@ export default function Wallet() {
           <Panel title="Withdraw funds" className="border-amber-200 bg-amber-50/70">
             {kycVerified ? (
               <div className="space-y-3">
-                {/* money buckets — only winnings are withdrawable */}
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <Bucket label="Balance" paise={wallet.data?.balancePaise} />
                   <Bucket label="Bonus" paise={wallet.data?.bonusPaise} />
