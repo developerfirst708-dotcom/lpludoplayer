@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom"; 
+import { useSearchParams } from "react-router-dom";
 import { api, apiUpload } from "../lib/api.js";
 import compressImage from "../lib/compressImage.js";
 import { socket } from "../lib/socket.js";
