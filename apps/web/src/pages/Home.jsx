@@ -117,18 +117,6 @@ export default function Home() {
         />
       </div>
 
-      {/* Floating WhatsApp Support Button (Direct Embedded Inline SVG) */}
-      <a
-        href="https://wa.me/919999999999"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="fixed bottom-20 right-4 z-50 flex flex-col items-center gap-0.5 transition-transform hover:scale-105 active:scale-95"
-        aria-label="WhatsApp Support"
-      >
-        <div className="flex h-13 w-13 items-center justify-center rounded-full bg-[#25D366] p-2.5 text-white shadow-xl ring-2 ring-white">
-          <svg
-            className="h-full w-full fill-current"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path d="M12.012 2c-5.508 0-9.988 4.479-9.988 9.988 0 1.762.459 3.483 1.332 5.002L2 22l5.127-1.34c1.464.799 3.118 1.218 4.885 1.218 5.508 0 9.988-4.479 9.988-9.988 0-5.509-4.48-9.99-9.988-9.99zm5.834 14.152c-.244.688-1.229 1.309-1.996 1.439-.527.088-1.213.158-3.526-.8-2.959-1.228-4.862-4.237-5.011-4.435-.146-.198-1.206-1.606-1.206-3.064 0-1.458.763-2.176 1.034-2.471.271-.295.592-.369.789-.369.197 0 .394.002.566.012.182.01.428-.069.67.512.246.591.837 2.043.911 2.191.074.148.123.32.025.517-.099.197-.148.32-.295.492-.148.172-.31.385-.443.517-.148.148-.303.31-.131.606.172.295.766 1.264 1.644 2.046 1.129 1.006 2.081 1.318 2.376 1.466.295.148.468.123.641-.074.172-.1
+    </div>
+  );
+}
