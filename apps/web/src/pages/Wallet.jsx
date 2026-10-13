@@ -1,623 +1,557 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
-import api, { getData, getError } from "../api.js";
-import socket from "../socket.js";
+import React, { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
+import { api, apiUpload } from "../lib/api.js";
+import compressImage from "../lib/compressImage.js";
+import { socket } from "../lib/socket.js";
+import { rupeesToPaise, formatPaise } from "@lpludo/shared";
+import { useToast } from "../components/Toast.jsx";
+import { Badge, Button, Empty, Input, Panel, Skeleton, Spinner, Tabs, TabsButton, TabsList, TabsPanel } from "../components/ui.jsx";
+import GatewayDepositCard from "../components/GatewayDepositCard.jsx";
 
-const MAX_SEARCHING_BATTLES = 2;
+/**
+ * Wallet — balances, deposits, withdrawals and the ledger, all in the shared
+ * light/gold theme. Reads the real API shapes: /wallet, /wallet/history,
+ * /payments/deposit/details (never computes money locally).
+ */
 
-const calculatePrizeAmount = (amount) => {
-  const amt = parseInt(amount, 10);
-  if (isNaN(amt)) return 0;
+const LEDGER_LABELS = {
+  deposit: "Deposit",
+  withdrawal_hold: "Withdrawal on hold",
+  withdrawal_paid: "Withdrawal paid",
+  withdrawal_refund: "Withdrawal refunded",
+};
 
-  const totalPool = amt * 2;
-  let platformFee = 0;
+// Filter allowed ledger types: Only Deposits & Withdrawals
+const DISPLAY_TYPES = ["deposit", "withdrawal_hold", "withdrawal_paid", "withdrawal_refund"];
 
-  if (amt >= 50 && amt <= 500) {
-    platformFee = amt * 0.1;
-  } else if (amt > 500 && amt <= 100000) {
-    platformFee = amt * 0.05;
+/** non-throwing paise parse — render paths must never toast */
+function safePaise(input) {
+  try {
+    return input === "" || input === null || input === undefined ? null : rupeesToPaise(input);
+  } catch {
+    return null;
+  }
+}
+
+/** Helper function to send native web/browser push notification */
+async function triggerDepositNotification(title, body) {
+  if (!("Notification" in window)) return;
+
+  if (Notification.permission === "granted") {
+    new Notification(title, { body, icon: "/favicon.ico" });
+  } else if (Notification.permission !== "denied") {
+    const permission = await Notification.requestPermission();
+    if (permission === "granted") {
+      new Notification(title, { body, icon: "/favicon.ico" });
+    }
+  }
+}
+
+export default function Wallet() {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const [tab, setTab] = useState("deposit");
+  const [amount, setAmount] = useState("");
+  const [utr, setUtr] = useState("");
+  const [upiId, setUpiId] = useState("");
+  const [proof, setProof] = useState(null);
+  const [proofName, setProofName] = useState("");
+  const [method, setMethod] = useState("upi"); // withdraw rail: upi | bank
+  const [bank, setBank] = useState({ accountName: "", accountNumber: "", ifsc: "" });
+  const [busy, setBusy] = useState(false);
+
+  const wallet = useQuery({ queryKey: ["wallet"], queryFn: () => api("/wallet") });
+  const profile = useQuery({ queryKey: ["profile"], queryFn: () => api("/user/profile") });
+  const details = useQuery({ queryKey: ["deposit-details"], queryFn: () => api("/payments/deposit/details") });
+  const history = useQuery({ queryKey: ["wallet", "history"], queryFn: () => api("/wallet/history?limit=50") });
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const depositId = searchParams.get("deposit");
+
+  // returning from the UPI checkout lands on ?deposit=<id> — show the verifying card
+  useEffect(() => {
+    if (depositId) setTab("deposit");
+  }, [depositId]);
+
+  function closeDepositCard() {
+    const next = new URLSearchParams(searchParams);
+    next.delete("deposit");
+    setSearchParams(next, { replace: true });
+    qc.invalidateQueries({ queryKey: ["deposits", "mine"] });
+    qc.invalidateQueries({ queryKey: ["wallet"] });
+    qc.invalidateQueries({ queryKey: ["wallet", "history"] });
   }
 
-  return Math.floor(totalPool - platformFee);
-};
-
-const getCreatorId = (battle) =>
-  String(battle?.createdBy?._id || battle?.createdBy?.id || battle?.createdBy || "");
-
-const getOpponentId = (battle) =>
-  String(battle?.opponent?._id || battle?.opponent?.id || battle?.opponent || "");
-
-const Battle = ({ setActiveTab }) => {
-  const [betAmount, setBetAmount] = useState("");
-  const [openBattles, setOpenBattles] = useState([]);
-  const [myBattles, setMyBattles] = useState([]);
-  const [actionLoading, setActionLoading] = useState(false);
-
-  const token = localStorage.getItem("token");
-
-  const myId = useMemo(() => {
-    try {
-      const user = JSON.parse(localStorage.getItem("user") || "{}");
-      if (user?._id || user?.id) return String(user._id || user.id);
-
-      const jwt = localStorage.getItem("token");
-      if (!jwt) return "";
-
-      const payload = JSON.parse(atob(jwt.split(".")[1] || ""));
-      return String(payload?._id || payload?.id || payload?.userId || payload?.user || "");
-    } catch {
-      return "";
-    }
-  }, []);
-
-  const calculatePrize = useCallback((amount) => calculatePrizeAmount(amount), []);
-
-  const hasMyResult = useCallback(
-    (battle) =>
-      Array.isArray(battle?.results)
-        ? battle.results.some((item) => String(item?.user?._id || item?.user || "") === myId)
-        : false,
-    [myId]
-  );
-
-  const mapContest = (c) => ({
-    ...c,
-    battleId: c.contestId,
-    amount: c.entryFee,
-    createdBy: c.createdBy,
-    opponent: c.opponent,
-  });
-
-  const fetchBattles = useCallback(async () => {
-    if (!token) return;
-
-    try {
-      const openRes = await api.get("/contests/open");
-      const openData = getData(openRes);
-      setOpenBattles(Array.isArray(openData?.contests) ? openData.contests.map(mapContest) : []);
-
-      const myRes = await api.get("/contests/my-contests");
-      const myData = getData(myRes);
-      setMyBattles(Array.isArray(myData?.contests) ? myData.contests.map(mapContest) : []);
-    } catch (err) {
-      console.log("Fetch error:", getError(err));
-    }
-  }, [token]);
-
+  // realtime: admin approvals / settlement credits land here without a reload
   useEffect(() => {
-    if (!token) {
-      setActiveTab?.("Login");
-      return;
+    if (!socket.connected) socket.connect();
+    function onWallet(view) {
+      qc.setQueryData(["wallet"], view);
+      qc.invalidateQueries({ queryKey: ["wallet", "history"] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
     }
-
-    if (!socket.connected) {
-      socket.connect();
+    function onProfileChanged() {
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["wallet"] });
     }
-    socket.emit("join-open-contests");
-
-    const handleContestUpdate = () => {
-      void fetchBattles();
-    };
-
-    queueMicrotask(handleContestUpdate);
-    socket.on("contest-created", handleContestUpdate);
-    socket.on("contest-updated", handleContestUpdate);
-    socket.on("contest-deleted", handleContestUpdate);
-    const refreshInterval = setInterval(handleContestUpdate, 5000);
-
+    socket.on("wallet:updated", onWallet);
+    socket.on("kyc:updated", onProfileChanged);
+    socket.on("deposit:updated", onProfileChanged);
+    socket.on("withdrawal:updated", onProfileChanged);
     return () => {
-      clearInterval(refreshInterval);
-      socket.off("contest-created", handleContestUpdate);
-      socket.off("contest-updated", handleContestUpdate);
-      socket.off("contest-deleted", handleContestUpdate);
+      socket.off("wallet:updated", onWallet);
+      socket.off("kyc:updated", onProfileChanged);
+      socket.off("deposit:updated", onProfileChanged);
+      socket.off("withdrawal:updated", onProfileChanged);
     };
-  }, [token, myId, fetchBattles, setActiveTab]);
+  }, [qc]);
 
-  const allBattles = useMemo(() => {
-    const map = new Map();
-    for (const battle of [...openBattles, ...myBattles]) {
-      if (!battle?.battleId) continue;
-      map.set(battle.battleId, battle);
+  const kycVerified = profile.data?.user?.kycStatus === "verified";
+
+  /** rupees (string) -> integer paise, with the shared exact-math guard */
+  function toPaise(input) {
+    try {
+      return rupeesToPaise(input);
+    } catch (err) {
+      toast.error(err.message || "Enter a valid amount");
+      return null;
     }
-    return Array.from(map.values());
-  }, [openBattles, myBattles]);
+  }
 
-  const mySearchingBattles = useMemo(() => {
-    const list = [];
-    for (const battle of myBattles) {
-      const status = String(battle?.status || "").toLowerCase();
-      if (status === "open" && getCreatorId(battle) === myId) {
-        list.push(battle);
-      }
-    }
-    return list;
-  }, [myBattles, myId]);
-
-  const myActiveBattle = useMemo(() => {
-    const activeStatuses = new Set([
-      "join_requested",
-      "running",
-      "room_submitted",
-      "result_submitted",
-      "cancel_requested",
+  async function refreshAll() {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["wallet"] }),
+      qc.invalidateQueries({ queryKey: ["profile"] }),
+      qc.invalidateQueries({ queryKey: ["wallet", "history"] }),
     ]);
+  }
 
-    for (const battle of myBattles) {
-      const status = String(battle?.status || "").toLowerCase();
-      if (!activeStatuses.has(status)) continue;
+  async function submitDeposit() {
+    const paise = toPaise(amount);
+    if (paise === null) {
+      toast.error("Please enter a valid amount");
+      return;
+    }
 
-      if (status === "result_submitted" || status === "cancel_requested") {
-        if (!hasMyResult(battle)) return battle;
+    // Check multiple of ₹50 (5000 paise)
+    if (paise % 5000 !== 0) {
+      const errMsg = "Deposit amount must be in multiples of ₹50!";
+      toast.error(errMsg);
+      triggerDepositNotification("Invalid Deposit Amount", errMsg);
+      return;
+    }
+
+    if (!proof) {
+      toast.error("Upload the payment screenshot");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      // upload the proof first, then claim with its key (key is required server-side)
+      const compressed = await compressImage(proof);
+      const { key } = await apiUpload("/uploads", compressed, "deposit");
+      await api("/payments/deposit", { method: "POST", body: { amountPaise: paise, utr: utr.trim(), proofImageKey: key } });
+
+      toast.success("Deposit submitted. Wait for admin approval.");
+
+      triggerDepositNotification(
+        "Deposit Request Submitted",
+        `Your deposit of ${formatPaise(paise)} with UTR: ${utr} was submitted successfully.`
+      );
+
+      setAmount("");
+      setUtr("");
+      setProof(null);
+      setProofName("");
+      await refreshAll();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function pickProof(file) {
+    if (!file) return;
+    setProof(file);
+    setProofName(file.name);
+  }
+
+  /**
+   * Instant UPI: the API creates the order and hands back the hosted checkout
+   * URL. We send the browser there; when it comes back the page shows the
+   * verifying card. The wallet is credited by the backend, never the client.
+   */
+  async function submitGatewayDeposit() {
+    const paise = toPaise(amount);
+    if (paise === null) {
+      toast.error("Please enter a valid amount");
+      return;
+    }
+
+    // Check multiple of ₹50 (5000 paise)
+    if (paise % 5000 !== 0) {
+      const errMsg = "Deposit amount must be in multiples of ₹50!";
+      toast.error(errMsg);
+      triggerDepositNotification("Invalid Deposit Amount", errMsg);
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const res = await api("/payments/deposit/gateway", { method: "POST", body: { amountPaise: paise } });
+
+      triggerDepositNotification(
+        "Initiating Payment",
+        `Redirecting to complete payment of ${formatPaise(paise)}.`
+      );
+
+      if (res.paymentUrl) {
+        window.location.href = res.paymentUrl; // hosted checkout (QR + UPI apps)
       } else {
-        return battle;
+        toast.error("Could not open the payment page");
       }
+    } catch (err) {
+      toast.error(err.message);
+      qc.invalidateQueries({ queryKey: ["deposit-details"] });
+      setBusy(false);
     }
-    return null;
-  }, [myBattles, hasMyResult]);
+  }
 
-  const visibleOpenBattles = useMemo(() => {
-    const list = [];
-    for (const battle of allBattles) {
-      const status = String(battle?.status || "").toLowerCase();
-      const isCreator = getCreatorId(battle) === myId;
-      const isOpponent = getOpponentId(battle) === myId;
+  async function submitWithdraw() {
+    const paise = toPaise(amount);
+    if (paise === null) return;
 
-      if (status === "open" || (status === "join_requested" && (isCreator || isOpponent))) {
-        list.push(battle);
+    // > ₹2000 must go to a bank account (reference rule)
+    const bankRequired = paise > 200000;
+    const finalMethod = bankRequired ? "bank" : method;
+    const body = { amountPaise: paise, method: finalMethod };
+
+    if (finalMethod === "upi") {
+      if (!upiId.trim()) { toast.error("Enter your UPI ID"); return; }
+      body.upiId = upiId.trim();
+    } else {
+      const b = {
+        accountName: bank.accountName.trim(),
+        accountNumber: bank.accountNumber.trim(),
+        ifsc: bank.ifsc.trim().toUpperCase(),
+      };
+      if (!b.accountName || !/^\d{6,20}$/.test(b.accountNumber) \vert{}\vert{} !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(b.ifsc)) {
+        toast.error("Enter valid bank details");
+        return;
       }
-    }
-    list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-    return list;
-  }, [allBattles, myId]);
-
-  const runningBattles = useMemo(() => {
-    const realRunningAndPendingBattles = [];
-    for (const battle of allBattles) {
-      const status = String(battle?.status || "").toLowerCase();
-      if (
-        status === "running" ||
-        status === "room_submitted" ||
-        status === "result_submitted" ||
-        status === "cancel_requested"
-      ) {
-        realRunningAndPendingBattles.push(battle);
-      }
+      body.bank = b;
     }
 
-    realRunningAndPendingBattles.sort((a, b) => {
-      const aMine = getCreatorId(a) === myId || getOpponentId(a) === myId;
-      const bMine = getCreatorId(b) === myId || getOpponentId(b) === myId;
-      if (aMine !== bMine) return aMine ? -1 : 1;
-      return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
-    });
-
-    return realRunningAndPendingBattles;
-  }, [allBattles, myId]);
-
-  const validateAmount = () => {
-    const amt = Number(betAmount);
-    if (!amt || amt < 50) {
-      alert("Min battle ₹50 ");
-      return false;
-    }
-    if (amt > 100000) {
-      alert("Max battle ₹100000");
-      return false;
-    }
-    if (amt % 50 !== 0) {
-      alert("Amount in Multiple ₹50 ");
-      return false;
-    }
-    return true;
-  };
-
-  const handleCreate = async () => {
-    if (!validateAmount()) return;
-    if (myActiveBattle) {
-      alert("You already in game ");
-      return;
-    }
-    if (mySearchingBattles.length >= MAX_SEARCHING_BATTLES) {
-      alert("set only 2 battle ");
-      return;
-    }
-
-    const amt = Number(betAmount);
-    const isSameAmountByMe = mySearchingBattles.some((battle) => Number(battle.amount) === amt);
-    if (isSameAmountByMe) {
-      alert("no same amount");
-      return;
-    }
-
+    setBusy(true);
     try {
-      setActionLoading(true);
-      await api.post("/contests/create", { amount: amt });
-      setBetAmount("");
-      fetchBattles();
+      await api("/payments/withdraw", { method: "POST", body });
+      toast.success("Withdrawal requested");
+      setAmount("");
+      await refreshAll();
     } catch (err) {
-      const errMsg = getError(err).toLowerCase();
-      if (errMsg.includes("insufficient") || errMsg.includes("balance") || errMsg.includes("fund")) {
-        alert("Insufficient balance");
-      } else {
-        alert(getError(err));
-      }
+      toast.error(err.message);
     } finally {
-      setActionLoading(false);
+      setBusy(false);
     }
-  };
+  }
 
-  const joinMatch = async (battleId) => {
-    if (myActiveBattle) {
-      alert("You are already in game.");
-      return;
-    }
-
+  async function copyUpi() {
+    const id = details.data?.upiId;
+    if (!id) return;
     try {
-      setActionLoading(true);
-      await api.post(`/contests/join/${battleId}`);
-      fetchBattles();
-      setActiveTab?.(`RoomCode_${battleId}`);
-    } catch (err) {
-      const errMsg = getError(err).toLowerCase();
-      if (errMsg.includes("insufficient") || errMsg.includes("balance") || errMsg.includes("fund")) {
-        alert("Insufficient balance");
-      } else {
-        alert(getError(err));
-      }
-    } finally {
-      setActionLoading(false);
+      await navigator.clipboard.writeText(id);
+      toast.success("UPI ID copied");
+    } catch {
+      toast.info(id);
     }
-  };
+  }
 
-  const startBattle = async (battleId) => {
-    try {
-      setActionLoading(true);
-      await api.post(`/contests/accept/${battleId}`);
-      fetchBattles();
-      setActiveTab?.(`RoomCode_${battleId}`);
-    } catch (err) {
-      console.log("Start error:", getError(err));
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const rejectBattle = async (battleId) => {
-    try {
-      setActionLoading(true);
-      await api.post(`/contests/reject/${battleId}`);
-      fetchBattles();
-    } catch (err) {
-      console.log("Reject error:", getError(err));
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const cancelBattle = async (battleId) => {
-    try {
-      setActionLoading(true);
-      await api.post(`/contests/cancel/${battleId}`);
-      fetchBattles();
-    } catch (err) {
-      console.log("Cancel error:", getError(err));
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const getOpenAction = (battle) => {
-    const status = String(battle?.status || "").toLowerCase();
-    const isMine = getCreatorId(battle) === myId;
-    const isOpponent = getOpponentId(battle) === myId;
-
-    if (status === "open" && isMine) {
-      return (
-        <button
-          disabled={actionLoading}
-          onClick={() => cancelBattle(battle.battleId)}
-          className="rounded-xl bg-rose-500/10 px-3.5 py-2 text-xs font-bold text-rose-600 ring-1 ring-rose-200 transition-all hover:bg-rose-500/20 active:scale-95 disabled:opacity-50"
-        >
-          Cancel
-        </button>
-      );
-    }
-
-    if (status === "open" && !isMine) {
-      return (
-        <button
-          disabled={actionLoading}
-          onClick={() => joinMatch(battle.battleId)}
-          className="rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-green-600 px-4 py-2 text-xs font-black text-white shadow-md shadow-emerald-500/25 transition-all hover:from-emerald-600 hover:to-green-700 active:scale-95 disabled:opacity-50"
-        >
-          PLAY
-        </button>
-      );
-    }
-
-    if (status === "join_requested" && isMine) {
-      return (
-        <div className="flex items-center gap-2">
-          <button
-            disabled={actionLoading}
-            onClick={() => startBattle(battle.battleId)}
-            className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-emerald-700 disabled:opacity-50"
-          >
-            START
-          </button>
-          <button
-            disabled={actionLoading}
-            onClick={() => rejectBattle(battle.battleId)}
-            className="rounded-xl bg-rose-500 px-3 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-rose-600 disabled:opacity-50"
-          >
-            REJECT
-          </button>
-        </div>
-      );
-    }
-
-    if (status === "join_requested" && isOpponent) {
-      return (
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-200 border-t-amber-600" />
-            <p className="text-[10px] font-black tracking-wider text-amber-700">WAITING</p>
-          </div>
-          <button
-            disabled={actionLoading}
-            onClick={() => cancelBattle(battle.battleId)}
-            className="rounded-xl bg-rose-500 px-2.5 py-1.5 text-[10px] font-bold text-white transition-all active:scale-95 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-        </div>
-      );
-    }
-
+  if (wallet.isLoading || profile.isLoading) {
     return (
-      <button disabled className="rounded-xl bg-slate-200 px-3 py-2 text-xs font-bold text-slate-500">
-        BUSY
-      </button>
+      <div className="space-y-3">
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-40 w-full" />
+      </div>
     );
-  };
+  }
+
+  if (wallet.isError) {
+    return <Empty title="Wallet unavailable" hint={wallet.error?.message} />;
+  }
+
+  // hybrid rail selection: instant gateway under the threshold, manual UPI + UTR at/above it
+  const g = details.data;
+  const gatewayPaise = safePaise(amount);
+  const gatewayMode = Boolean(g?.gatewayEnabled) && gatewayPaise !== null && gatewayPaise < g.gatewayThresholdPaise;
+  const showManualForm = Boolean(g) && (!g.gatewayEnabled || (gatewayPaise !== null && !gatewayMode));
+
+  // Filter history to display ONLY deposits and withdrawals
+  const filteredHistory = (history.data?.items || []).filter((item) => DISPLAY_TYPES.includes(item.type));
+
+  // withdraw rail: only winnings are withdrawable; > ₹2000 must be a bank transfer
+  const winningsPaise = wallet.data?.winningsPaise ?? 0;
+  const withdrawPaise = safePaise(amount);
+  const bankRequired = withdrawPaise !== null && withdrawPaise > 200000;
+  const effectiveMethod = bankRequired ? "bank" : method;
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-amber-50/50 via-white to-amber-50/20 px-4 pb-28 pt-4 text-slate-950">
-      <div className="pointer-events-none absolute -top-10 -left-10 h-48 w-48 rounded-full bg-amber-200/40 blur-3xl" />
-      <div className="pointer-events-none absolute top-1/3 -right-10 h-48 w-48 rounded-full bg-yellow-300/30 blur-3xl" />
+    <div className="space-y-4">
+      <Tabs value={tab} onChange={setTab}>
+        <TabsList>
+          <TabsButton value="deposit" activeValue={tab} onChange={setTab}>Add funds</TabsButton>
+          <TabsButton value="withdraw" activeValue={tab} onChange={setTab}>Withdraw</TabsButton>
+          <TabsButton value="history" activeValue={tab} onChange={setTab}>History</TabsButton>
+        </TabsList>
 
-      <div className="relative z-10 mx-auto max-w-md space-y-4">
-        <div className="relative overflow-hidden rounded-2xl border border-amber-300/80 bg-gradient-to-r from-amber-100/90 via-amber-50 to-yellow-100/90 px-4 py-3 text-center text-xs font-bold text-amber-950 shadow-sm">
-          <span className="absolute -right-4 -bottom-4 text-4xl opacity-15 select-none" aria-hidden="true">🎲</span>
-          👉दोस्तों Battle Ludo 🎲. कभी आपका भरोसा नहीं तोड़ेगा , 24×7 Withdrawal चालू रहता है 👈
-        </div>
+        <TabsPanel match={tab} value="deposit">
+          {/* Gorgeous Colorful Ludo-Themed Add Funds Panel */}
+          <Panel title="Add funds" className="border-amber-300 bg-gradient-to-b from-amber-50/95 via-white to-amber-50/60 shadow-xl rounded-3xl">
+            <div className="space-y-3.5">
+              {depositId && <GatewayDepositCard depositId={depositId} onClose={closeDepositCard} />}
 
-        <div className="rounded-3xl border border-amber-200/80 bg-white/90 p-4 shadow-xl backdrop-blur-md">
-          <div className="flex items-center justify-between mb-3 px-2">
-            <h2 className="text-xs font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-              <span>🎲</span> Create Battle Challenge
-            </h2>
-            <span className="text-[10px] font-bold text-slate-400">Min ₹50 | Max ₹1L</span>
-          </div>
+              {/* Deposit UPI Policy Notice Box */}
+              <div className="relative overflow-hidden rounded-2xl border border-rose-300 bg-gradient-to-r from-rose-100/90 via-orange-50 to-amber-100/90 p-3.5 text-center text-xs font-black text-rose-800 shadow-md">
+                <span className="absolute -left-2 -bottom-2 text-2xl opacity-20 select-none" aria-hidden="true">🎲</span>
+                👉 जिस UPI से Deposit होगा उसी UPI पर Withdraw होगा ! 👈
+              </div>
 
-          <div className="flex rounded-full items-center gap-2 bg-amber-50/60 p-1.5 border border-amber-200/60 shadow-inner">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-400 text-sm font-black text-slate-950 shadow-sm">
-              ₹
+              {g?.gatewayUnavailable && !gatewayMode && (
+                <p className="rounded-xl border border-amber-200 bg-amber-100 px-3 py-2 text-[11px] font-semibold text-amber-800">
+                  Instant UPI is temporarily unavailable — pay by UPI transfer below and submit the UTR number.
+                </p>
+              )}
+
+              <Input
+                label="Amount (₹)"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="Enter Amount"
+                inputMode="decimal"
+                hint={
+                  g
+                    ? `Min ${formatPaise(g.minPaise)} · Max ${formatPaise(g.maxPaise)} · Must be multiple of ₹50${
+                        g.gatewayEnabled ? ` · instant under ${formatPaise(g.gatewayThresholdPaise)}` : ""
+                      }`
+                    : "Must be a multiple of ₹50"
+                }
+              />
+
+              {/* Preset amounts: 200, 500, 1000, 2000 */}
+              <div className="flex gap-2">
+                {[200, 500, 1000, 2000].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setAmount(String(preset))}
+                    className="flex-1 rounded-2xl border border-amber-300/80 bg-gradient-to-br from-amber-100/80 via-yellow-50 to-amber-200/50 py-2 text-xs font-black text-amber-950 shadow-sm transition-all hover:border-amber-400 hover:shadow-md active:scale-95"
+                  >
+                    +₹{preset}
+                  </button>
+                ))}
+              </div>
+
+              {g?.gatewayEnabled && gatewayPaise === null && (
+                <p className="rounded-xl bg-amber-100/60 px-3 py-2 text-[11px] text-slate-600">
+                  Under {formatPaise(g.gatewayThresholdPaise)} you pay instantly with UPI (QR / UPI apps) and the
+                  balance is credited automatically. {formatPaise(g.gatewayThresholdPaise)} or more is a UPI
+                  transfer with a UTR number.
+                </p>
+              )}
+
+              {gatewayMode && (
+                <>
+                  <Button
+                    className="w-full rounded-full bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 py-3 text-xs font-black text-neutral-950 shadow-lg shadow-amber-500/25 hover:brightness-105"
+                    onClick={submitGatewayDeposit}
+                    loading={busy}
+                  >
+                    Pay {gatewayPaise ? formatPaise(gatewayPaise) : ""} instantly
+                  </Button>
+                  <p className="text-[11px] text-slate-600">
+                    You will be taken to the secure UPI checkout (QR + PhonePe / Paytm / GPay).
+                    {gatewayPaise !== null && gatewayPaise % 5000 !== 0
+                      ? " Deposit amount must be in multiples of ₹50."
+                      : " Your wallet is credited automatically as soon as the payment is confirmed."}
+                  </p>
+                </>
+              )}
+
+              {showManualForm && (
+                <div className="space-y-3.5 border-t border-amber-200/80 pt-3">
+                  {g?.upiId && (
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#FAD655] bg-gradient-to-r from-[#FEF4BA] via-[#FDE88C] to-[#FCD95B] px-4 py-3 shadow-md">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black uppercase tracking-wide text-amber-900">Pay to UPI ID</p>
+                        <p className="truncate font-mono text-sm font-black text-slate-900">{g.upiId}</p>
+                        <p className="text-[11px] font-extrabold text-slate-700">{g.upiName}</p>
+                      </div>
+                      <Button variant="ghost" className="shrink-0 rounded-full bg-white/90 px-4 py-2 text-xs font-black shadow-sm hover:bg-white" onClick={copyUpi}>
+                        Copy
+                      </Button>
+                    </div>
+                  )}
+                  <Input
+                    label="UTR / Transaction ID"
+                    value={utr}
+                    onChange={(e) => setUtr(e.target.value.toUpperCase())}
+                    placeholder="XXXXXXXXXXXX"
+                  />
+
+                  {/* payment screenshot */}
+                  <div className="flex items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3.5 shadow-sm">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Payment screenshot (required)</p>
+                      <p className="truncate text-xs font-bold text-slate-700">{proofName || "No file chosen"}</p>
+                    </div>
+                    <label className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-amber-400 px-4 py-2 text-xs font-black text-neutral-950 shadow-sm transition-all hover:bg-amber-500 active:scale-95">
+                      {proof ? "Replace" : "Upload"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="sr-only"
+                        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; pickProof(f); }}
+                      />
+                    </label>
+                  </div>
+
+                  <Button
+                    className="w-full rounded-full bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 py-3 text-xs font-black text-neutral-950 shadow-lg shadow-amber-500/25 hover:brightness-105"
+                    onClick={submitDeposit}
+                    loading={busy}
+                    disabled={!amount || utr.trim().length < 6 || !proof}
+                  >
+                    Submit deposit
+                  </Button>
+                  <p className="text-[11px] text-slate-600">
+                    Pay the exact amount (multiple of ₹50) to the UPI ID above, then attach the payment screenshot and submit the UTR. An admin verifies and credits your wallet.
+                  </p>
+                </div>
+              )}
             </div>
+          </Panel>
+        </TabsPanel>
 
-            <input
-              type="number"
-              placeholder="Enter Amount (e.g. 100)"
-              className="min-w-0 flex-1 bg-transparent px-2 text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400 placeholder:font-normal"
-              value={betAmount}
-              min="50"
-              max="100000"
-              step="50"
-              onChange={(e) => setBetAmount(e.target.value)}
-            />
+        <TabsPanel match={tab} value="withdraw">
+          <Panel title="Withdraw funds" className="border-amber-200 bg-amber-50/70">
+            {kycVerified ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <Bucket label="Balance" paise={wallet.data?.balancePaise} />
+                  <Bucket label="Bonus" paise={wallet.data?.bonusPaise} />
+                  <Bucket label="Winnings" paise={wallet.data?.winningsPaise} highlight />
+                </div>
+                <p className="text-[11px] font-bold text-emerald-700">
+                  Withdrawable (winnings): {formatPaise(winningsPaise)}
+                </p>
 
-            <button
-              disabled={actionLoading}
-              onClick={handleCreate}
-              className="rounded-full bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 px-6 py-2.5 text-xs font-black tracking-wide text-neutral-950 shadow-md shadow-amber-500/20 transition-all hover:brightness-105 active:scale-95 disabled:opacity-60"
-            >
-              {actionLoading ? "..." : "Set Battle"}
-            </button>
-          </div>
-        </div>
+                <Input
+                  label="Amount (₹)"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="200"
+                  inputMode="decimal"
+                  hint="Minimum ₹200 · up to ₹2000 via UPI"
+                />
 
-        <SectionTitle title="Open Battles" />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={bankRequired}
+                    onClick={() => setMethod("upi")}
+                    className={`flex-1 rounded-xl border py-2 text-xs font-bold transition-colors disabled:opacity-50 ${
+                      effectiveMethod === "upi" ? "border-slate-800 bg-white text-slate-900" : "border-amber-200 bg-white/60 text-slate-500"
+                    }`}
+                  >
+                    UPI
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMethod("bank")}
+                    className={`flex-1 rounded-xl border py-2 text-xs font-bold transition-colors ${
+                      effectiveMethod === "bank" ? "border-slate-800 bg-white text-slate-900" : "border-amber-200 bg-white/60 text-slate-500"
+                    }`}
+                  >
+                    Bank
+                  </button>
+                </div>
 
-        <div className="space-y-3">
-          {visibleOpenBattles.length === 0 && <EmptyBox text="No Battles Live" />}
+                {effectiveMethod === "upi" ? (
+                  <Input
+                    label="Your UPI ID"
+                    value={upiId}
+                    onChange={(e) => setUpiId(e.target.value)}
+                    placeholder="name@bank"
+                  />
+                ) : (
+                  <>
+                    <Input label="Account holder name" value={bank.accountName} onChange={(e) => setBank({ ...bank, accountName: e.target.value })} placeholder="Full name" />
+                    <Input label="Account number" value={bank.accountNumber} inputMode="numeric" onChange={(e) => setBank({ ...bank, accountNumber: e.target.value.replace(/\D/g, "") })} placeholder="Account number" />
+                    <Input label="IFSC code" value={bank.ifsc} onChange={(e) => setBank({ ...bank, ifsc: e.target.value.toUpperCase() })} placeholder="ABCD0123456" />
+                  </>
+                )}
 
-          {visibleOpenBattles.map((battle) => (
-            <OpenCard
-              key={battle.battleId}
-              battle={battle}
-              action={getOpenAction(battle)}
-              calculatePrize={calculatePrize}
-            />
-          ))}
-        </div>
-
-        <div className="my-2 h-[2px] w-full bg-gradient-to-r from-transparent via-amber-200 to-transparent" />
-
-        <SectionTitle title="Running Battles" />
-
-        <div className="space-y-3">
-          {runningBattles.length === 0 && <EmptyBox text="No Running Battles" />}
-
-          {runningBattles.map((battle) => (
-            <MatchCard
-              key={battle.battleId}
-              battle={battle}
-              calculatePrize={calculatePrize}
-              myId={myId}
-              onClick={() => {
-                setActiveTab?.(`RoomCode_${battle.battleId}`);
-              }}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-function SectionTitle({ title }) {
-  return (
-    <div className="mb-2 mt-4 flex items-center justify-between px-1">
-      <div className="flex items-center gap-2">
-        <h3 className="text-sm font-black uppercase tracking-wider text-slate-900">
-          {title}
-        </h3>
-        <span className="text-xs">⚔️</span>
-      </div>
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100/80 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-emerald-800 shadow-sm border border-emerald-200/50">
-        <span className="relative flex h-2 w-2" aria-hidden="true">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-600" />
-        </span>
-        Live
-      </span>
-    </div>
-  );
-}
-
-function EmptyBox({ text }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-amber-200 bg-white/60 p-6 text-center text-xs font-black uppercase tracking-wider text-slate-400 shadow-sm">
-      {text}
-    </div>
-  );
-}
-
-function OpenCard({ battle, action, calculatePrize }) {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-amber-200/70 bg-white shadow-md transition-all hover:shadow-lg">
-      <div className="bg-gradient-to-r from-amber-100/80 via-amber-50 to-amber-100/80 px-4 py-2 border-b border-amber-100 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-xs">🎲</span>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Challenge From</span>
-          <span className="truncate text-xs font-black text-slate-900">
-            {battle?.createdBy?.name || "Player"}
-          </span>
-        </div>
-        <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-800">
-          Open
-        </span>
-      </div>
-
-      <div className="grid grid-cols-3 items-center gap-2 px-4 py-3">
-        <MoneyBlock label="Entry Fee" value={battle?.amount} />
-
-        <div className="flex justify-center shrink-0">
-          {action}
-        </div>
-
-        <MoneyBlock label="Winning Prize" value={battle?.prize || calculatePrize(battle?.amount)} right isGreen />
-      </div>
-    </div>
-  );
-}
-
-function MatchCard({ battle, calculatePrize, onClick, myId }) {
-  if (!battle) return null;
-
-  const status = String(battle?.status || "").toLowerCase();
-  const isPending = status === "result_submitted" || status === "cancel_requested";
-
-  const isMine = getCreatorId(battle) === myId;
-  const isOpponent = getOpponentId(battle) === myId;
-  const isParticipant = isMine || isOpponent;
-
-  const creatorName = battle?.createdBy?.name || "Player";
-  const opponentName = battle?.opponent?.name || "Opponent";
-  const amount = battle?.amount || 0;
-  const prize = battle?.prize || calculatePrize(battle?.amount);
-
-  return (
-    <div
-      onClick={onClick}
-      className={`cursor-pointer overflow-hidden rounded-2xl bg-white shadow-md border transition-all active:scale-[0.99] hover:shadow-lg ${
-        isPending ? "border-orange-300 ring-2 ring-orange-100" : "border-amber-200/70"
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2 border-b border-amber-100 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-4 py-2 text-white">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="text-[10px] font-bold uppercase tracking-wide text-amber-300">Entry:</span>
-          <span className="text-xs font-black text-white">₹{amount}</span>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
-          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Battle Active</span>
-        </div>
-
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-300">Prize:</span>
-          <span className="text-xs font-black text-emerald-400">₹{prize}</span>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-2 px-6 py-3.5 bg-amber-50/20">
-        <PlayerAvatar name={creatorName} role="Creator" />
-
-        <div className="flex shrink-0 items-center justify-center">
-          {isParticipant ? (
-            isPending ? (
-              <button className="rounded-full bg-orange-500 px-3.5 py-1 text-[10px] font-black uppercase tracking-wide text-white shadow-md shadow-orange-500/25 active:scale-95">
-                Pending
-              </button>
+                <Button
+                  className="w-full"
+                  onClick={submitWithdraw}
+                  loading={busy}
+                  disabled={!amount || (effectiveMethod === "upi" ? !upiId.trim() : !(bank.accountName && bank.accountNumber && bank.ifsc))}
+                >
+                  Request withdrawal
+                </Button>
+                <p className="text-[11px] text-slate-600">
+                  Only winnings can be withdrawn. Above ₹2000 a bank transfer is required. The amount is put on hold
+                  immediately and paid out by an admin.
+                </p>
+              </div>
             ) : (
-              <button className="rounded-full bg-gradient-to-r from-amber-500 to-yellow-500 px-4 py-1.5 text-[10px] font-black uppercase tracking-wide text-neutral-950 shadow-md shadow-amber-500/25 active:scale-95">
-                VIEW ROOM
-              </button>
-            )
-          ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-yellow-500 shadow-md ring-2 ring-white">
-              <span className="text-xs font-black text-neutral-950">🎲</span>
-            </div>
-          )}
-        </div>
+              <Empty title="KYC required" hint="Open KYC Verification from your Profile to unlock withdrawals." />
+            )}
+          </Panel>
+        </TabsPanel>
 
-        <PlayerAvatar name={opponentName} role="Opponent" />
-      </div>
+        <TabsPanel match={tab} value="history">
+          <Panel title="Transaction history">
+            {history.isLoading && <Spinner />}
+            {!history.isLoading && filteredHistory.length === 0 && (
+              <Empty title="No deposits or withdrawals yet" hint="Your deposits and withdrawal requests will appear here." />
+            )}
+            {!history.isLoading && filteredHistory.length > 0 && (
+              <ul className="divide-y divide-gray-100">
+                {filteredHistory.map((row) => (
+                  <li key={row.id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-slate-700">{LEDGER_LABELS[row.type] || row.type}</p>
+                      <p className="truncate text-[11px] text-slate-400">
+                        {row.note || row.refType} · {new Date(row.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <Badge amountPaise={row.amountPaise} />
+                      <p className="text-[10px] font-semibold text-slate-400">
+                        bal {formatPaise(row.balanceAfterPaise ?? 0, { withSymbol: false })}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </TabsPanel>
+      </Tabs>
     </div>
   );
 }
 
-function PlayerAvatar({ name, role }) {
-  const safeName = String(name || "Player").trim() || "Player";
-  const initials = safeName.slice(0, 1).toUpperCase();
-
+/** small read-only bucket chip (Balance / Bonus / Winnings) */
+function Bucket({ label, paise, highlight }) {
   return (
-    <div className="flex min-w-0 flex-col items-center gap-1">
-      <div
-        aria-hidden="true"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-100 text-sm font-black text-amber-900 shadow-sm ring-2 ring-white"
-      >
-        {initials}
-      </div>
-      <div className="text-center">
-        <p className="w-20 truncate text-[11px] font-black text-slate-800">
-          {safeName}
-        </p>
-        <p className="text-[9px] font-bold uppercase text-slate-400">{role}</p>
-      </div>
+    <div className={`rounded-xl border px-2 py-2 ${highlight ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-white"}`}>
+      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-sm font-black text-slate-800">{formatPaise(paise ?? 0, { withSymbol: false })}</p>
     </div>
   );
 }
-
-function MoneyBlock({ label, value, right = false, isGreen = false }) {
-  return (
-    <div className={right ? "text-right" : "text-left"}>
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
-      <p className={`mt-0.5 text-sm font-black ${isGreen ? "text-emerald-600" : "text-slate-900"}`}>
-        ₹{value || 0}
-      </p>
-    </div>
-  );
-}
-
-export default Battle;
