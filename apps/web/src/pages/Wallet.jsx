@@ -9,12 +9,6 @@ import { useToast } from "../components/Toast.jsx";
 import { Badge, Button, Empty, Input, Panel, Skeleton, Spinner, Tabs, TabsButton, TabsList, TabsPanel } from "../components/ui.jsx";
 import GatewayDepositCard from "../components/GatewayDepositCard.jsx";
 
-/**
- * Wallet — balances, deposits, withdrawals and the ledger, all in the shared
- * light/gold theme. Reads the real API shapes: /wallet, /wallet/history,
- * /payments/deposit/details (never computes money locally).
- */
-
 const LEDGER_LABELS = {
   deposit: "Deposit",
   withdrawal_hold: "Withdrawal on hold",
@@ -22,10 +16,8 @@ const LEDGER_LABELS = {
   withdrawal_refund: "Withdrawal refunded",
 };
 
-// Filter allowed ledger types: Only Deposits & Withdrawals
 const DISPLAY_TYPES = ["deposit", "withdrawal_hold", "withdrawal_paid", "withdrawal_refund"];
 
-/** non-throwing paise parse — render paths must never toast */
 function safePaise(input) {
   try {
     return input === "" || input === null || input === undefined ? null : rupeesToPaise(input);
@@ -34,7 +26,6 @@ function safePaise(input) {
   }
 }
 
-/** Helper function to send native web/browser push notification */
 async function triggerDepositNotification(title, body) {
   if (!("Notification" in window)) return;
 
@@ -57,7 +48,7 @@ export default function Wallet() {
   const [upiId, setUpiId] = useState("");
   const [proof, setProof] = useState(null);
   const [proofName, setProofName] = useState("");
-  const [method, setMethod] = useState("upi"); // withdraw rail: upi | bank
+  const [method, setMethod] = useState("upi");
   const [bank, setBank] = useState({ accountName: "", accountNumber: "", ifsc: "" });
   const [busy, setBusy] = useState(false);
 
@@ -69,7 +60,6 @@ export default function Wallet() {
   const [searchParams, setSearchParams] = useSearchParams();
   const depositId = searchParams.get("deposit");
 
-  // returning from the UPI checkout lands on ?deposit=<id> — show the verifying card
   useEffect(() => {
     if (depositId) setTab("deposit");
   }, [depositId]);
@@ -83,7 +73,6 @@ export default function Wallet() {
     qc.invalidateQueries({ queryKey: ["wallet", "history"] });
   }
 
-  // realtime: admin approvals / settlement credits land here without a reload
   useEffect(() => {
     if (!socket.connected) socket.connect();
     function onWallet(view) {
@@ -109,7 +98,6 @@ export default function Wallet() {
 
   const kycVerified = profile.data?.user?.kycStatus === "verified";
 
-  /** rupees (string) -> integer paise, with the shared exact-math guard */
   function toPaise(input) {
     try {
       return rupeesToPaise(input);
@@ -134,7 +122,6 @@ export default function Wallet() {
       return;
     }
 
-    // Check multiple of ₹50 (5000 paise)
     if (paise % 5000 !== 0) {
       const errMsg = "Deposit amount must be in multiples of ₹50!";
       toast.error(errMsg);
@@ -313,24 +300,22 @@ export default function Wallet() {
                 </p>
               )}
 
-              {/* Amount Input Component styled with yellow background container */}
-              <div className="rounded-2xl border-2 border-amber-400 bg-amber-100/90 p-3 shadow-inner space-y-1">
-                <Input
-                  label="Amount (₹)"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="Enter Amount"
-                  inputMode="decimal"
-                  className="bg-amber-50 font-black text-slate-950"
-                />
-                <p className="text-[11px] font-bold text-amber-900 px-1">
-                  {g
+              {/* Amount Input Component with Yellow Background */}
+              <Input
+                label="Amount (₹)"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="Enter Amount"
+                inputMode="decimal"
+                className="border-amber-400 bg-amber-100/90 text-slate-950 font-black focus:bg-amber-100"
+                hint={
+                  g
                     ? `Min ${formatPaise(g.minPaise)} · Max ${formatPaise(g.maxPaise)} · Must be multiple of ₹50${
                         g.gatewayEnabled ? ` · instant under ${formatPaise(g.gatewayThresholdPaise)}` : ""
                       }`
-                    : "Must be a multiple of ₹50"}
-                </p>
-              </div>
+                    : "Must be a multiple of ₹50"
+                }
+              />
 
               {/* Quick Preset Amounts Buttons Below Box with Green Theme */}
               <div className="flex gap-2">
@@ -538,7 +523,6 @@ export default function Wallet() {
   );
 }
 
-/** small read-only bucket chip (Balance / Bonus / Winnings) */
 function Bucket({ label, paise, highlight }) {
   return (
     <div className={`rounded-xl border px-2 py-2 ${highlight ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-white"}`}>
