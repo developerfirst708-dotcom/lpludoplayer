@@ -47,9 +47,9 @@ export default function History() {
   const rows = ledger.data?.items || [];
   const deposits = rows.filter((r) => r.type === "deposit");
   const withdrawals = rows.filter((r) => WITHDRAWAL_TYPES.includes(r.type));
-  const penalties = rows.filter((r) => r.type === "admin_adjustment" && r.amountPaise < 0);
+  const penalties = rows.filter((r) => r.type === "adjustment" && r.amountPaise < 0);
   const bonuses = rows.filter(
-    (r) => r.type === "referral_commission" || (r.type === "admin_adjustment" && r.amountPaise > 0)
+    (r) => r.type === "referral_commission" || (r.type === "adjustment" && r.amountPaise > 0)
   );
 
   const games = (mine.data?.items || []).filter((c) => SETTLED.includes(c.status));
