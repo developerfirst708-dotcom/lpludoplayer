@@ -359,7 +359,7 @@ export default function Play() {
     <div className="flex flex-col gap-4">
       {/* banner — same welcome strip as Adda Ludo's battle screen */}
       <div className="rounded-xl bg-ink px-5 py-3 text-[12px] font-bold leading-snug text-white shadow-card">
-        LPLUDO में आपका स्वागत है, Auto Deposit-Auto Withdrawal चालू है, 👉Gateway सुविधा उपलब्ध है। आपका विश्वास बनाये रखे 🙏
+        LPLUDO में आपका स्वागत है, Auto Deposit-Auto Withdrawal चालू है, 👉Gateway सुविधा उपलब्ध है। आपका विश्वास बनाये रखे 🙏 
       </div>
 
       <div className="flex justify-center">
