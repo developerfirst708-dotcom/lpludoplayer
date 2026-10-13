@@ -47,7 +47,6 @@ export default function Battle() {
       return;
     }
 
-    // Optional: compute time elapsed based on contest.updatedAt or start fresh per session
     const timer = setInterval(() => {
       setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
@@ -127,7 +126,7 @@ export default function Battle() {
     }
   }
 
-  // Join Battle Action (sends a join request — no amount is locked yet)
+  // Join Battle Action
   const join = (targetId = id) =>
     run(
       "join",
@@ -138,7 +137,7 @@ export default function Battle() {
       "Join request sent — waiting for the creator to accept"
     );
 
-  // Accept Join Request Action (creator starts the match; both stakes lock here)
+  // Accept Join Request Action
   const accept = (targetId = id) =>
     run(
       "accept",
@@ -146,7 +145,7 @@ export default function Battle() {
       "Battle started!"
     );
 
-  // Reject Join Request Action (creator declines — the battle reopens)
+  // Reject Join Request Action
   const rejectJoin = (targetId = id) =>
     run(
       "reject",
@@ -232,7 +231,7 @@ export default function Battle() {
 
     return (
       <div className="max-w-md mx-auto p-4 space-y-4 text-slate-950">
-        {/* Battle header — both players + entry/winning amounts */}
+        {/* Battle header */}
         <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
           <div className="flex items-start justify-between gap-2 bg-slate-900 px-4 py-4 text-white">
             <PlayerHead player={c.players?.find((p) => p.seat === 1)} />
@@ -306,7 +305,7 @@ export default function Battle() {
           </Panel>
         )}
 
-        {/* Join request — the creator accepts to start (and lock both stakes) */}
+        {/* Join request */}
         {c.status === "join_requested" && (
           <Panel title={isCreator ? "Opponent Found" : "Join Requested"}>
             {isCreator ? (
@@ -329,7 +328,7 @@ export default function Battle() {
           </Panel>
         )}
 
-        {/* Room Code with 150s Timer on Right Corner & Green Copy Button */}
+        {/* Room Code with Timer & Green Copy Button */}
         {(c.status === "running" || c.status === "room_submitted" || c.status === "result_submitted") && inBattle && (
           <Panel title="Room Code">
             {c.roomCode ? (
@@ -341,7 +340,7 @@ export default function Battle() {
                   <p className="font-mono text-lg font-black tracking-widest text-slate-900">{c.roomCode}</p>
                 </div>
                 
-                {/* Right Corner: 150s Timer + Green Copy Button */}
+                {/* Timer + Green Copy Button */}
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <span className="block text-[9px] font-extrabold uppercase text-slate-400">Time Left</span>
@@ -390,7 +389,7 @@ export default function Battle() {
           </ul>
         </Panel>
 
-        {/* Result Submission */}
+        {/* Result Submission — Dark Styled Outcome Buttons */}
         {inBattle && !myReport && resultOpen && (
           <Panel title="Report Match Result">
             <div className="space-y-3">
@@ -398,21 +397,33 @@ export default function Battle() {
                 <button
                   type="button"
                   onClick={() => setOutcome("won")}
-                  className={`rounded-xl py-3 text-xs font-black uppercase text-white transition-all ${outcome === "won" ? "bg-emerald-600 ring-4 ring-emerald-300" : "bg-emerald-600/70"}`}
+                  className={`rounded-xl py-3 text-xs font-black uppercase text-white shadow-md transition-all ${
+                    outcome === "won"
+                      ? "bg-emerald-950 ring-4 ring-emerald-400 scale-105"
+                      : "bg-emerald-800 hover:bg-emerald-900"
+                  }`}
                 >
                   I Won
                 </button>
                 <button
                   type="button"
                   onClick={() => { setOutcome("lost"); setScreenshot(null); setScreenshotName(""); }}
-                  className={`rounded-xl py-3 text-xs font-black uppercase text-white transition-all ${outcome === "lost" ? "bg-rose-600 ring-4 ring-rose-300" : "bg-rose-600/70"}`}
+                  className={`rounded-xl py-3 text-xs font-black uppercase text-white shadow-md transition-all ${
+                    outcome === "lost"
+                      ? "bg-rose-950 ring-4 ring-rose-400 scale-105"
+                      : "bg-rose-800 hover:bg-rose-900"
+                  }`}
                 >
                   I Lost
                 </button>
                 <button
                   type="button"
                   onClick={() => { setOutcome("cancel"); setScreenshot(null); setScreenshotName(""); }}
-                  className={`rounded-xl py-3 text-xs font-black uppercase text-white transition-all ${outcome === "cancel" ? "bg-slate-600 ring-4 ring-slate-300" : "bg-slate-600/70"}`}
+                  className={`rounded-xl py-3 text-xs font-black uppercase text-white shadow-md transition-all ${
+                    outcome === "cancel"
+                      ? "bg-slate-950 ring-4 ring-slate-400 scale-105"
+                      : "bg-slate-800 hover:bg-slate-900"
+                  }`}
                 >
                   Cancel
                 </button>
