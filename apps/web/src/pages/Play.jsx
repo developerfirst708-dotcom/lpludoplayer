@@ -41,35 +41,62 @@ const RUNNING_STATUSES = ["running", "room_submitted", "result_submitted", "canc
  * one just shows a friendly notice instead of routing to a fake room.
  * --------------------------------------------------------------------- */
 // Real players' `name` is a random 5-letter code (e.g. VLGBM, UDWFK, QJQAG), and
-// that is exactly what real running battles show (no full names there — those are
-// only used for dummy Open battles). So the demo battles use the same code style.
-const FAKE_RUNNING_BATTLES = [
-  // [minutesAgo, stake(paise), creator, opponent]
-  [4, 10000, "UDWFK", "QJQAG"],
-  [11, 50000, "BLMLW", "URRZQ"],
-  [19, 20000, "KLHQY", "YSXXZ"],
-  [26, 100000, "FRMBL", "ZREWH"],
-  [33, 25000, "VETQQ", "WUAPG"],
-  [41, 5000, "DNJAT", "UGGTV"],
-  [48, 150000, "RKTBH", "CVCDA"],
-  [56, 30000, "TMCPT", "LRZPJ"],
-  [64, 80000, "NRXSN", "UKAAQ"],
-  [72, 15000, "JHYTD", "MORVG"],
-  [81, 200000, "PGSLK", "XCVBN"],
-  [89, 300000, "RYTUE", "ASDFG"],
-  [97, 500000, "HJKLQ", "ZXCVB"],
-  [104, 750000, "ERTYU", "QWERT"],
-  [112, 1000000, "TREWV", "PLMOK"],
-].map(([minsAgo, stake, creator, opponent], i) => ({
-  id: `demo-${i + 1}`,
-  status: "running",
-  stake,
-  createdAt: new Date(Date.now() - minsAgo * 60_000).toISOString(),
-  players: [
-    { seat: 1, name: creator, isYou: false },
-    { seat: 2, name: opponent, isYou: false },
-  ],
-}));
+// that is exactly what real running battles show — so the demo battles use the
+// same code style. They are regenerated EVERY HOUR with different random names
+// and amounts so the lobby keeps looking alive.
+
+/** deterministic PRNG so the set is stable within an hour, new the next hour */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function randomCode(rnd) {
+  const L = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // no I/O so codes look like real user codes
+  let s = "";
+  for (let i = 0; i < 5; i++) s += L[Math.floor(rnd() * L.length)];
+  return s;
+}
+
+/** realistic stake pool (paise), kept distinct within one generation */
+const FAKE_STAKE_POOL = [
+  5000, 10000, 15000, 20000, 25000, 30000, 40000, 50000, 75000, 100000,
+  150000, 200000, 250000, 300000, 400000, 500000, 750000, 1000000, 1500000, 2000000,
+];
+
+function makeFakeRunningBattles(seed) {
+  const rnd = mulberry32(seed);
+
+  // 30 unique 5-letter codes (15 creator + 15 opponent)
+  const codes = [];
+  while (codes.length < 30) {
+    const c = randomCode(rnd);
+    if (!codes.includes(c)) codes.push(c);
+  }
+
+  // pick 15 distinct stakes (shuffle + take)
+  const pool = [...FAKE_STAKE_POOL];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const stakes = pool.slice(0, 15);
+
+  return stakes.map((stake, i) => ({
+    id: `demo-${i + 1}`,
+    status: "running",
+    stake,
+    createdAt: new Date(Date.now() - (4 + (15 - i) * 31 + (i % 3) * 9) * 60_000).toISOString(),
+    players: [
+      { seat: 1, name: codes[i * 2], isYou: false },
+      { seat: 2, name: codes[i * 2 + 1], isYou: false },
+    ],
+  }));
+}
 
 const isDemo = (id) => String(id).startsWith("demo-");
 
@@ -152,6 +179,15 @@ export default function Play() {
     );
   }, [openBattles, myBattles]);
 
+  // demo battles rotate every hour (new random names + amounts) — track the hour
+  // bucket and rebuild the list when it changes
+  const [hourKey, setHourKey] = useState(() => Math.floor(Date.now() / 3_600_000));
+  useEffect(() => {
+    const id = setInterval(() => setHourKey(Math.floor(Date.now() / 3_600_000)), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const demoBattles = useMemo(() => makeFakeRunningBattles(hourKey), [hourKey]);
+
   const runningBattles = useMemo(() => {
     const real = myBattles.filter((c) => RUNNING_STATUSES.includes(c.status));
 
@@ -167,8 +203,8 @@ export default function Play() {
     if (mine.data === undefined) return real;
 
     // demo battles fill the rest of the list (after any real ones)
-    return [...real, ...FAKE_RUNNING_BATTLES];
-  }, [myBattles, mine.data]);
+    return [...real, ...demoBattles];
+  }, [myBattles, mine.data, demoBattles]);
 
   const previewPaise = useMemo(() => {
     const amt = Number(betstake);
@@ -248,6 +284,7 @@ export default function Play() {
       navigate(`/battle/${battleId}`);
     } catch (err) {
       reportError(err);
+      invalidate(); // reflect an instant dummy-battle removal (and balance) right away
     } finally {
       setActionLoading(false);
     }

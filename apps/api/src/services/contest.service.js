@@ -170,9 +170,13 @@ export async function joinContest({ userId, contestId, ip }) {
     throw new ConflictError("You have an active battle. Submit its result before joining a new one");
   }
 
-  // a dummy (social-proof) battle is never playable — clicking it removes it
-  const dummy = await Contest.findOne({ _id: contestId, isDummy: true }).select("_id").lean();
+  // a dummy (social-proof) battle is never playable. It only disappears for a
+  // player who can actually afford it — so clicking it looks "taken". A player
+  // without enough balance is told they have insufficient funds instead, and
+  // the dummy battle is left in place.
+  const dummy = await Contest.findOne({ _id: contestId, isDummy: true }).select("stake").lean();
   if (dummy) {
+    await walletService.assertAvailable(userId, dummy.stake); // throws ForbiddenError (insufficient balance)
     await Contest.deleteOne({ _id: dummy._id });
     await invalidateOpenList();
     throw new ConflictError("This battle is no longer available");
