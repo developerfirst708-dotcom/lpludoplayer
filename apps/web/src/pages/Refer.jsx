@@ -32,7 +32,7 @@ export default function Refer() {
   }
 
   const shareText = encodeURIComponent(
-    `Play Ludo and win real cash! 🎲💰 Use my referral code *${code}* to sign up.\nJoin now: ${link}`
+    `LPLUDO एक बार फिर से हम आपकी सेवा में हाज़िर हैं और आपके लिए GATEWAY सुविधा लेकर आए हैं। Play Ludo and win real cash! 🎲💰 Use my referral code *${code}* to sign up.\nJoin now: ${link}`
   );
 
   if (referrals.isLoading) {
