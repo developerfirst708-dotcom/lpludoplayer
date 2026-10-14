@@ -24,6 +24,9 @@ export default function Battle() {
   const [screenshot, setScreenshot] = useState(null);
   const [screenshotName, setScreenshotName] = useState("");
 
+  // Confirmation dialog state for Loss or Cancel ("lost" | "cancel" | null)
+  const [confirmAction, setConfirmAction] = useState(null);
+
   // Timer State for Room Code (150 seconds)
   const [timeLeft, setTimeLeft] = useState(150);
 
@@ -31,7 +34,6 @@ export default function Battle() {
   /*                            API QUERIES                                     */
   /* -------------------------------------------------------------------------- */
 
-  // Fetch Single Contest Details for the room view
   const contestQuery = useQuery({
     queryKey: ["contest", id],
     queryFn: () => api(`/contests/${id}`).then((r) => r.contest),
@@ -41,7 +43,6 @@ export default function Battle() {
 
   const contest = contestQuery.data;
 
-  // 150-second countdown timer effect when room code exists or match is running
   useEffect(() => {
     if (!contest || !["running", "room_submitted", "result_submitted"].includes(contest.status)) {
       return;
@@ -160,9 +161,9 @@ export default function Battle() {
       "Room code shared!"
     );
 
-  const submitResultReport = () => {
-    if (!outcome) return;
-    if (outcome === "won" && !screenshot) {
+  const submitResultReport = (forcedOutcome = outcome) => {
+    if (!forcedOutcome) return;
+    if (forcedOutcome === "won" && !screenshot) {
       return toast.error("Upload your winning screenshot proof first");
     }
 
@@ -177,11 +178,12 @@ export default function Battle() {
         }
         await api(`/contests/${id}/result`, {
           method: "POST",
-          body: { outcome, screenshotKeys },
+          body: { outcome: forcedOutcome, screenshotKeys },
         });
-        setReported(outcome);
+        setReported(forcedOutcome);
+        setConfirmAction(null);
       },
-      outcome === "cancel" ? "Cancellation requested" : "Result reported successfully!"
+      forcedOutcome === "cancel" ? "Cancellation requested" : "Result reported successfully!"
     );
   };
 
@@ -372,7 +374,7 @@ export default function Battle() {
           </div>
         )}
 
-        {/* Rules (Translated to Hindi) */}
+        {/* Rules */}
         <Panel title="नियम (Rules)">
           <ul className="list-disc space-y-1.5 pl-5 text-xs font-semibold leading-relaxed text-slate-600">
             <li>दोनों खिलाड़ियों को ऊपर दिए गए कोड से एक ही Ludo King रूम में शामिल होना होगा[cite: 2].</li>
@@ -390,7 +392,7 @@ export default function Battle() {
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => setOutcome("won")}
+                  onClick={() => { setOutcome("won"); setConfirmAction(null); }}
                   className={`rounded-xl py-3 text-xs font-black uppercase text-white shadow-md transition-all ${
                     outcome === "won"
                       ? "bg-emerald-950 ring-4 ring-emerald-400 scale-105"
@@ -401,7 +403,7 @@ export default function Battle() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setOutcome("lost"); setScreenshot(null); setScreenshotName(""); }}
+                  onClick={() => { setOutcome("lost"); setScreenshot(null); setScreenshotName(""); setConfirmAction("lost"); }}
                   className={`rounded-xl py-3 text-xs font-black uppercase text-white shadow-md transition-all ${
                     outcome === "lost"
                       ? "bg-rose-950 ring-4 ring-rose-400 scale-105"
@@ -412,7 +414,7 @@ export default function Battle() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setOutcome("cancel"); setScreenshot(null); setScreenshotName(""); }}
+                  onClick={() => { setOutcome("cancel"); setScreenshot(null); setScreenshotName(""); setConfirmAction("cancel"); }}
                   className={`rounded-xl py-3 text-xs font-black uppercase text-white shadow-md transition-all ${
                     outcome === "cancel"
                       ? "bg-slate-950 ring-4 ring-slate-400 scale-105"
@@ -422,6 +424,31 @@ export default function Battle() {
                   Cancel
                 </button>
               </div>
+
+              {/* Confirmation Popup Box for Lost or Cancel */}
+              {confirmAction && (
+                <div className="rounded-2xl border border-amber-300 bg-amber-50/95 p-4 space-y-3 text-center shadow-md">
+                  <p className="text-xs font-black text-amber-900">
+                    {confirmAction === "lost" ? "⚠️ Are you sure you lost this match?" : "⚠️ Are you sure you want to cancel?"}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black py-2 rounded-xl"
+                      onClick={() => submitResultReport(confirmAction)}
+                      loading={busy === "result"}
+                    >
+                      Yes, Submit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="flex-1 bg-white hover:bg-slate-100 text-slate-700 text-xs font-black py-2 rounded-xl border border-slate-200"
+                      onClick={() => setConfirmAction(null)}
+                    >
+                      No
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {outcome === "won" && (
                 <div className="flex items-center justify-between rounded-xl border border-gray-200 p-3 bg-gray-50">
@@ -445,14 +472,16 @@ export default function Battle() {
                 </div>
               )}
 
-              <Button
-                className="w-full"
-                onClick={submitResultReport}
-                loading={busy === "result"}
-                disabled={!outcome || (outcome === "won" && !screenshot)}
-              >
-                Submit Result
-              </Button>
+              {outcome === "won" && (
+                <Button
+                  className="w-full"
+                  onClick={() => submitResultReport("won")}
+                  loading={busy === "result"}
+                  disabled={!screenshot}
+                >
+                  Submit Result
+                </Button>
+              )}
             </div>
           </Panel>
         )}
