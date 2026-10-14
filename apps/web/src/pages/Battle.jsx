@@ -70,7 +70,6 @@ export default function Battle() {
       if (id) {
         socket.emit("watch:contest", { contestId: id }, () => {});
       } else {
-        // lobby view: subscribe to the open-battles room for live list changes
         socket.emit("subscribe:contests", {}, () => {});
       }
     }
@@ -126,7 +125,6 @@ export default function Battle() {
     }
   }
 
-  // Join Battle Action
   const join = (targetId = id) =>
     run(
       "join",
@@ -137,7 +135,6 @@ export default function Battle() {
       "Join request sent — waiting for the creator to accept"
     );
 
-  // Accept Join Request Action
   const accept = (targetId = id) =>
     run(
       "accept",
@@ -145,7 +142,6 @@ export default function Battle() {
       "Battle started!"
     );
 
-  // Reject Join Request Action
   const rejectJoin = (targetId = id) =>
     run(
       "reject",
@@ -153,7 +149,6 @@ export default function Battle() {
       "Join request declined"
     );
 
-  // Submit Room Code Action
   const submitRoom = () =>
     run(
       "room",
@@ -165,7 +160,6 @@ export default function Battle() {
       "Room code shared!"
     );
 
-  // Submit Result Action
   const submitResultReport = () => {
     if (!outcome) return;
     if (outcome === "won" && !screenshot) {
@@ -191,7 +185,6 @@ export default function Battle() {
     );
   };
 
-  // Cancel Battle Action
   const cancelBattle = (targetId = id) =>
     run(
       "cancel",
@@ -328,33 +321,35 @@ export default function Battle() {
           </Panel>
         )}
 
-        {/* Room Code with Timer & Green Copy Button */}
+        {/* Room Code Panel with Timer at Top-Right Corner */}
         {(c.status === "running" || c.status === "room_submitted" || c.status === "result_submitted") && inBattle && (
-          <Panel title="Room Code">
+          <div className="rounded-2xl border border-gray-100 bg-white shadow-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black text-slate-900">Room Code</h3>
+              <div className="flex items-center gap-1.5 rounded-lg bg-amber-100/70 px-2.5 py-1 border border-amber-200">
+                <span className="text-[10px] font-extrabold uppercase text-amber-800">Time:</span>
+                <span className={`font-mono text-xs font-black ${timeLeft < 30 ? "text-rose-600 animate-pulse" : "text-amber-900"}`}>
+                  {formatTimer(timeLeft)}
+                </span>
+              </div>
+            </div>
+
             {c.roomCode ? (
               <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-3">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Ludo King Room Code</p>
-                  </div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Ludo King Room Code</p>
                   <p className="font-mono text-lg font-black tracking-widest text-slate-900">{c.roomCode}</p>
                 </div>
                 
-                {/* Timer + Green Copy Button */}
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <span className="block text-[9px] font-extrabold uppercase text-slate-400">Time Left</span>
-                    <span className={`font-mono text-xs font-black ${timeLeft < 30 ? "text-rose-600 animate-pulse" : "text-amber-900"}`}>
-                      {formatTimer(timeLeft)}
-                    </span>
-                  </div>
+                {/* Copy Button: Only shown if NOT the creator, or hidden for creator after room code is shared */}
+                {!isCreator && (
                   <Button 
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-3 py-1.5 rounded-lg shadow-sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-4 py-2 rounded-xl shadow-sm"
                     onClick={() => { navigator.clipboard?.writeText(c.roomCode); toast.success("Code copied!"); }}
                   >
                     Copy Code
                   </Button>
-                </div>
+                )}
               </div>
             ) : isCreator ? (
               <div className="space-y-2">
@@ -366,7 +361,7 @@ export default function Battle() {
                   inputMode="numeric"
                   maxLength={8}
                 />
-                <Button className="w-full" onClick={submitRoom} loading={busy === "room"} disabled={roomCode.length !== 8}>
+                <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black" onClick={submitRoom} loading={busy === "room"} disabled={roomCode.length !== 8}>
                   Share Room Code
                 </Button>
               </div>
@@ -375,7 +370,7 @@ export default function Battle() {
                 Waiting for the creator to share the room code…
               </p>
             )}
-          </Panel>
+          </div>
         )}
 
         {/* Rules */}
@@ -389,7 +384,7 @@ export default function Battle() {
           </ul>
         </Panel>
 
-        {/* Result Submission — Dark Styled Outcome Buttons */}
+        {/* Result Submission */}
         {inBattle && !myReport && resultOpen && (
           <Panel title="Report Match Result">
             <div className="space-y-3">
