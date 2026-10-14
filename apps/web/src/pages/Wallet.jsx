@@ -47,12 +47,13 @@ export default function Wallet() {
   const [amount, setAmount] = useState("");
   const [utr, setUtr] = useState("");
   const [upiId, setUpiId] = useState("");
+  const [confirmUpiId, setConfirmUpiId] = useState("");
   const [proof, setProof] = useState(null);
   const [proofName, setProofName] = useState("");
   const [method, setMethod] = useState("upi");
   const [bank, setBank] = useState({ accountName: "", accountNumber: "", ifsc: "" });
   const [busy, setBusy] = useState(false);
-  const [gatewayId, setGatewayId] = useState(null); // a gateway order started from THIS page (in a new tab)
+  const [gatewayId, setGatewayId] = useState(null);
 
   const wallet = useQuery({ queryKey: ["wallet"], queryFn: () => api("/wallet") });
   const profile = useQuery({ queryKey: ["profile"], queryFn: () => api("/user/profile") });
@@ -61,7 +62,6 @@ export default function Wallet() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const redirectDepositId = searchParams.get("deposit");
-  // whichever deposit is live right now (returned-from-checkout OR started here)
   const depositId = redirectDepositId || gatewayId;
 
   useEffect(() => {
@@ -194,12 +194,9 @@ export default function Wallet() {
       );
 
       if (res.paymentUrl) {
-        // open the day-checkout (QR) in a NEW TAB so we stay on the wallet page
-        // and can detect the user pressing back / abandoning the payment.
         setGatewayId(res.id);
         const win = window.open(res.paymentUrl, "_blank");
         if (!win) {
-          // popup blocked — nothing ever opened, so cancel instantly
           toast.info("Could not open the payment page — this deposit has been cancelled");
           api(`/payments/deposit/${res.id}/cancel`, { method: "POST" }).then(() => {
             setGatewayId(null);
@@ -229,6 +226,7 @@ export default function Wallet() {
 
     if (finalMethod === "upi") {
       if (!upiId.trim()) { toast.error("Enter your UPI ID"); return; }
+      if (upiId.trim() !== confirmUpiId.trim()) { toast.error("UPI IDs do not match"); return; }
       body.upiId = upiId.trim();
     } else {
       const b = {
@@ -253,6 +251,8 @@ export default function Wallet() {
       await api("/payments/withdraw", { method: "POST", body });
       toast.success("Withdrawal requested");
       setAmount("");
+      setUpiId("");
+      setConfirmUpiId("");
       await refreshAll();
     } catch (err) {
       toast.error(err.message);
@@ -312,7 +312,6 @@ export default function Wallet() {
             <div className="space-y-3.5">
               {depositId && <GatewayDepositCard depositId={depositId} onClose={closeDepositCard} />}
 
-              {/* Deposit UPI Policy Notice Box */}
               <div className="relative overflow-hidden rounded-2xl border border-rose-300 bg-gradient-to-r from-rose-100/90 via-orange-50 to-amber-100/90 p-3.5 text-center text-xs font-black text-rose-800 shadow-md">
                 <span className="absolute -left-2 -bottom-2 text-2xl opacity-20 select-none" aria-hidden="true">🎲</span>
                 👉 जिस UPI से Deposit होगा उसी UPI पर Withdraw होगा ! 👈
@@ -324,7 +323,6 @@ export default function Wallet() {
                 </p>
               )}
 
-              {/* Amount Input Component with Yellow Background */}
               <Input
                 label="Amount (₹)"
                 value={amount}
@@ -341,7 +339,6 @@ export default function Wallet() {
                 }
               />
 
-              {/* Quick Preset Amounts Buttons - Two Rows of 4 Buttons */}
               <div className="space-y-2">
                 <div className="flex gap-2">
                   {[
@@ -379,14 +376,6 @@ export default function Wallet() {
                 </div>
               </div>
 
-              {g?.gatewayEnabled && gatewayPaise === null && (
-                <p className="rounded-xl bg-amber-100/60 px-3 py-2 text-[11px] text-slate-600">
-                  Under {formatPaise(g.gatewayThresholdPaise)} you pay instantly with UPI (QR / UPI apps) and the
-                  balance is credited automatically. {formatPaise(g.gatewayThresholdPaise)} or more is a UPI
-                  transfer with a UTR number.
-                </p>
-              )}
-
               {gatewayMode && (
                 <>
                   <Button
@@ -398,9 +387,6 @@ export default function Wallet() {
                   </Button>
                   <p className="text-[11px] text-slate-600">
                     You will be taken to the secure UPI checkout (QR + PhonePe / Paytm / GPay).
-                    {gatewayPaise !== null && gatewayPaise % 5000 !== 0
-                      ? " Deposit amount must be in multiples of ₹50."
-                      : " Your wallet is credited automatically as soon as the payment is confirmed."}
                   </p>
                 </>
               )}
@@ -426,7 +412,6 @@ export default function Wallet() {
                     placeholder="XXXXXXXXXXXX"
                   />
 
-                  {/* payment screenshot */}
                   <div className="flex items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3.5 shadow-sm">
                     <div className="min-w-0">
                       <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Payment screenshot (required)</p>
@@ -451,9 +436,6 @@ export default function Wallet() {
                   >
                     Submit deposit
                   </Button>
-                  <p className="text-[11px] text-slate-600">
-                    Pay the exact amount (multiple of ₹50) to the UPI ID above, then attach the payment screenshot and submit the UTR. An admin verifies and credits your wallet.
-                  </p>
                 </div>
               )}
             </div>
@@ -473,7 +455,6 @@ export default function Wallet() {
                   Withdrawable (winnings): {formatPaise(winningsPaise)}
                 </p>
 
-                {/* Amount Input with Yellow Background */}
                 <Input
                   label="Amount (₹)"
                   value={amount}
@@ -511,13 +492,22 @@ export default function Wallet() {
                 </div>
 
                 {effectiveMethod === "upi" ? (
-                  <Input
-                    label="Your UPI ID"
-                    value={upiId}
-                    onChange={(e) => setUpiId(e.target.value)}
-                    placeholder="name@bank"
-                    className="border-amber-300 bg-white"
-                  />
+                  <div className="space-y-3">
+                    <Input
+                      label="Your UPI ID"
+                      value={upiId}
+                      onChange={(e) => setUpiId(e.target.value)}
+                      placeholder="name@bank"
+                      className="border-amber-300 bg-white"
+                    />
+                    <Input
+                      label="Confirm UPI ID"
+                      value={confirmUpiId}
+                      onChange={(e) => setConfirmUpiId(e.target.value)}
+                      placeholder="Re-enter UPI ID"
+                      className="border-amber-300 bg-white"
+                    />
+                  </div>
                 ) : (
                   <div className="space-y-3 rounded-2xl border border-amber-200/80 bg-amber-50/50 p-3">
                     <Input label="Account holder name" value={bank.accountName} onChange={(e) => setBank({ ...bank, accountName: e.target.value })} placeholder="Full name" className="border-amber-300 bg-white" />
@@ -530,13 +520,10 @@ export default function Wallet() {
                   className="w-full rounded-full bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 py-3 text-xs font-black text-neutral-950 shadow-lg shadow-amber-500/25 hover:brightness-105"
                   onClick={submitWithdraw}
                   loading={busy}
-                  disabled={!amount || (effectiveMethod === "upi" ? !upiId.trim() : !(bank.accountName && bank.accountNumber && bank.ifsc))}
+                  disabled={!amount || (effectiveMethod === "upi" ? (!upiId.trim() || upiId.trim() !== confirmUpiId.trim()) : !(bank.accountName && bank.accountNumber && bank.ifsc))}
                 >
                   Request withdrawal
                 </Button>
-                <p className="text-[11px] text-slate-600 px-1">
-                  Only winnings can be withdrawn. Above ₹2000 a bank transfer is required. The amount is put on hold immediately and paid out by an admin.
-                </p>
               </div>
             ) : (
               <div className="space-y-3 py-2">
