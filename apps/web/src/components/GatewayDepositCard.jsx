@@ -49,6 +49,29 @@ export default function GatewayDepositCard({ depositId, onClose }) {
 
   const status = deposit.data?.status;
 
+  // If the user opened this deposit in a new tab and then comes back to the
+  // wallet WITHOUT completing the payment (i.e. pressed back / abandoned it),
+  // cancel the order instantly so it cannot lock the "one deposit" slot.
+  // The backend force-reconciles the gateway first, so a payment that DID go
+  // through is credited instead of cancelled — no money is ever lost.
+  useEffect(() => {
+    let blurredAt = 0;
+    const onBlur = () => { blurredAt = Date.now(); };
+    const onFocus = () => {
+      if (!blurredAt) return;
+      blurredAt = 0;
+      const current = deposit.data;
+      if (current?.status === "pending") cancel.mutate();
+    };
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deposit.data?.status]);
+
   useEffect(() => {
     if (status === "approved") {
       toast.success("Payment received — wallet credited");

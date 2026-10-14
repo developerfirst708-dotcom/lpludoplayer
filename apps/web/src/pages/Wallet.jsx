@@ -52,6 +52,7 @@ export default function Wallet() {
   const [method, setMethod] = useState("upi");
   const [bank, setBank] = useState({ accountName: "", accountNumber: "", ifsc: "" });
   const [busy, setBusy] = useState(false);
+  const [gatewayId, setGatewayId] = useState(null); // a gateway order started from THIS page (in a new tab)
 
   const wallet = useQuery({ queryKey: ["wallet"], queryFn: () => api("/wallet") });
   const profile = useQuery({ queryKey: ["profile"], queryFn: () => api("/user/profile") });
@@ -59,13 +60,16 @@ export default function Wallet() {
   const history = useQuery({ queryKey: ["wallet", "history"], queryFn: () => api("/wallet/history?limit=50") });
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const depositId = searchParams.get("deposit");
+  const redirectDepositId = searchParams.get("deposit");
+  // whichever deposit is live right now (returned-from-checkout OR started here)
+  const depositId = redirectDepositId || gatewayId;
 
   useEffect(() => {
-    if (depositId) setTab("deposit");
-  }, [depositId]);
+    if (redirectDepositId) setTab("deposit");
+  }, [redirectDepositId]);
 
   function closeDepositCard() {
+    setGatewayId(null);
     const next = new URLSearchParams(searchParams);
     next.delete("deposit");
     setSearchParams(next, { replace: true });
@@ -190,7 +194,21 @@ export default function Wallet() {
       );
 
       if (res.paymentUrl) {
-        window.location.href = res.paymentUrl;
+        // open the day-checkout (QR) in a NEW TAB so we stay on the wallet page
+        // and can detect the user pressing back / abandoning the payment.
+        setGatewayId(res.id);
+        const win = window.open(res.paymentUrl, "_blank");
+        if (!win) {
+          // popup blocked — nothing ever opened, so cancel instantly
+          toast.info("Could not open the payment page — this deposit has been cancelled");
+          api(`/payments/deposit/${res.id}/cancel`, { method: "POST" }).then(() => {
+            setGatewayId(null);
+            qc.invalidateQueries({ queryKey: ["wallet"] });
+            qc.invalidateQueries({ queryKey: ["deposit-details"] });
+            qc.invalidateQueries({ queryKey: ["deposits", "mine"] });
+          }).catch(() => {});
+        }
+        setBusy(false);
       } else {
         toast.error("Could not open the payment page");
       }

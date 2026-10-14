@@ -11,7 +11,7 @@ const settingsSchema = new mongoose.Schema(
     websiteName: { type: String, trim: true, default: "LPLUDO" },
     depositUpiId: { type: String, trim: true },
     depositUpiName: { type: String, trim: true },
-    depositMinPaise: { type: Number, default: 10000 },   // ₹100
+    depositMinPaise: { type: Number, default: 5000 },    // ₹50
     depositMaxPaise: { type: Number, default: 10000000 }, // ₹1,00,000
     withdrawalMinPaise: { type: Number, default: 20000 }, // ₹200
     /**

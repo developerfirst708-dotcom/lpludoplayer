@@ -36,3 +36,7 @@ REFERENCE_PROJECT_ANALYSIS.md
 Battle.zip
 battleludo.zip
 changes_to_do.txt
+# android build outputs + signing keys
+apps/android/dist/
+*.keystore
+*.jks
