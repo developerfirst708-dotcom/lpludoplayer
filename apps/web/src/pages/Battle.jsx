@@ -341,7 +341,6 @@ export default function Battle() {
                   <p className="font-mono text-lg font-black tracking-widest text-slate-900">{c.roomCode}</p>
                 </div>
                 
-                {/* Copy Button: Only shown if NOT the creator, or hidden for creator after room code is shared */}
                 {!isCreator && (
                   <Button 
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-4 py-2 rounded-xl shadow-sm"
@@ -373,14 +372,14 @@ export default function Battle() {
           </div>
         )}
 
-        {/* Rules */}
-        <Panel title="Rules">
+        {/* Rules (Translated to Hindi) */}
+        <Panel title="नियम (Rules)">
           <ul className="list-disc space-y-1.5 pl-5 text-xs font-semibold leading-relaxed text-slate-600">
-            <li>Both players must join the same Ludo King room with the code above.</li>
-            <li>Do not leave a running match — leaving before it ends counts as a loss.</li>
-            <li>Only a win claim needs a screenshot of the final result; a loss needs no proof.</li>
-            <li>Any dispute is reviewed by an admin and settled shortly.</li>
-            <li>Play fair — cheating leads to a penalty and account suspension.</li>
+            <li>दोनों खिलाड़ियों को ऊपर दिए गए कोड से एक ही Ludo King रूम में शामिल होना होगा[cite: 2].</li>
+            <li>चल रहे मैच को बीच में न छोड़ें — मैच पूरा होने से पहले छोड़ने पर हार (Loss) माना जाएगा[cite: 2].</li>
+            <li>केवल जीतने पर (Win claim) अंतिम परिणाम का स्क्रीनशॉट अपलोड करना आवश्यक है; हारने पर किसी प्रमाण की आवश्यकता नहीं है[cite: 2].</li>
+            <li>किसी भी विवाद (Dispute) की समीक्षा Admin द्वारा की जाती है और जल्द ही समाधान किया जाता है[cite: 2].</li>
+            <li>फेयर खेलें — धोखाधड़ी करने पर जुर्माना और अकाउंट सस्पेंड किया जा सकता है[cite: 2].</li>
           </ul>
         </Panel>
 
