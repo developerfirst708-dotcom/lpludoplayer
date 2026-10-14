@@ -497,7 +497,7 @@ export default function Wallet() {
                       label="Your UPI ID"
                       value={upiId}
                       onChange={(e) => setUpiId(e.target.value)}
-                      placeholder="name@bank"
+                      placeholder="enter UPI ID"
                       className="border-amber-300 bg-white"
                     />
                     <Input
