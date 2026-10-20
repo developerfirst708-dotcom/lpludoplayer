@@ -3,6 +3,7 @@ import { withTransaction } from "../db/connect.js";
 import { applyLedger } from "./ledger.service.js";
 import { withLock } from "../db/redis.js";
 import { Wallet } from "../db/models/wallet.model.js";
+import { User } from "../db/models/user.model.js";
 import { ForbiddenError } from "@lpludo/shared";
 
 /**
@@ -139,8 +140,14 @@ export async function creditPrize({ userId, contestId, amountPaise, settledBy = 
 }
 
 /** Withdrawals: only the winnings bucket is withdrawable (reference rule).
- *  Request moves winnings -> held; pay consumes it; reject returns it to balance. */
+ *  Request moves winnings -> held; pay consumes it; reject returns it to balance.
+ *  Defence-in-depth: KYC MUST be verified before any money is held — regardless
+ *  of which controller/route reached the money-move layer. */
 export async function holdWithdrawal({ userId, withdrawalId, amountPaise, session }) {
+  const player = await User.findById(userId).select("kyc.status").lean();
+  if (!player || player.kyc?.status !== "verified") {
+    throw new ForbiddenError("KYC verification is required before withdrawing");
+  }
   const run = async (s) => {
     const wallet = await getOrCreateWallet(userId, { session: s });
     if ((wallet.winningsPaise || 0) < amountPaise) {

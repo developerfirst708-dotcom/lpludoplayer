@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Panel } from "../components/ui.jsx";
-import { onInstallState, canInstall, promptInstall } from "../lib/installApp.js";
+import { onInstallState, canInstall, promptInstall, isStandalone } from "../lib/installApp.js";
 
 /**
  * App Download — installs the PWA shortcut instead of a real APK.
@@ -13,7 +13,7 @@ const isIOS = () =>
   !window.MSStream;
 
 export default function AppDownload() {
-  const [state, setState] = useState({ canPrompt: false, installed: false });
+  const [state, setState] = useState({ canPrompt: false, installed: isStandalone() });
 
   useEffect(() => onInstallState((s) => setState(s)), []);
 
@@ -54,17 +54,21 @@ export default function AppDownload() {
             Install the app shortcut on your phone and play anywhere. Deposits and withdrawals work exactly like the website.
           </p>
 
-          <button
-            type="button"
-            onClick={handleInstall}
-            disabled={busy}
-            className="mt-1 inline-flex items-center gap-2 rounded-full bg-[#25D366] px-6 py-3 text-sm font-extrabold uppercase tracking-wide text-white shadow-md shadow-emerald-500/30 transition-all hover:bg-[#20bd5a] active:scale-95 disabled:opacity-60"
-          >
-            {busy ? "Preparing…" : "Download App"}
-          </button>
+          {!state.installed && (
+            <button
+              type="button"
+              onClick={handleInstall}
+              disabled={busy}
+              className="mt-1 inline-flex items-center gap-2 rounded-full bg-[#25D366] px-6 py-3 text-sm font-extrabold uppercase tracking-wide text-white shadow-md shadow-emerald-500/30 transition-all hover:bg-[#20bd5a] active:scale-95 disabled:opacity-60"
+            >
+              {busy ? "Preparing…" : "Download App"}
+            </button>
+          )}
 
           <p className="text-[11px] font-semibold text-slate-400">
-            {hint || "A popup will confirm installing the app on your device."}
+            {state.installed
+              ? "LPLUDO is already installed as an app on this device."
+              : hint || "A popup will confirm installing the app on your device."}
           </p>
 
           <Link to="/" className="text-xs font-extrabold text-brand-600 hover:text-brand-500">

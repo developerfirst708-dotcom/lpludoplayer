@@ -43,8 +43,9 @@ const DRAWER_ITEMS = [
   { to: "/history", label: "History", icon: "history", tone: "text-purple-600" },
   { to: "/refer-history", label: "Refer History", icon: "list", tone: "text-teal-600" },
   { to: "/support", label: "Support", icon: "support", tone: "text-rose-600" },
-  { to: "/app-download", label: "App Download", icon: "download", tone: "text-sky-600" },
 ];
+// "App Download" is added back in the drawer unless we are already running as an
+// installed PWA shortcut (no point offering an install for an installed app).
 
 function useWalletView() {
   const { data } = useQuery({ queryKey: ["wallet"], queryFn: () => api("/wallet") });
@@ -73,17 +74,19 @@ function AppHeader({ onOpenMenu }) {
       </Link>
 
       <div className="ml-auto flex items-center gap-1.5">
-        {/* app download */}
-        <a
-          href="/app-download"
-          aria-label="Download the app"
-          title="Download the app"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm transition-all active:scale-95"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4.5-4.5M12 16l4.5-4.5M4 20h16" />
-          </svg>
-        </a>
+        {/* app download — hidden once the PWA is installed / running standalone */}
+        {!standalone && (
+          <a
+            href="/app-download"
+            aria-label="Download the app"
+            title="Download the app"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm transition-all active:scale-95"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4.5-4.5M12 16l4.5-4.5M4 20h16" />
+            </svg>
+          </a>
+        )}
 
         {/* deposit balance */}
         <Link
@@ -114,6 +117,13 @@ function AppHeader({ onOpenMenu }) {
 }
 
 function Drawer({ open, onClose }) {
+  // hide the "App Download" entry when running as an installed PWA shortcut
+  const [standalone, setStandalone] = useState(false);
+  useEffect(() => onInstallState((s) => { if (s.installed) setStandalone(true); }), []);
+  const drawerItems = standalone
+    ? DRAWER_ITEMS
+    : [...DRAWER_ITEMS, { to: "/app-download", label: "App Download", icon: "download", tone: "text-sky-600" }];
+
   return (
     <>
       {open && (
@@ -148,7 +158,7 @@ function Drawer({ open, onClose }) {
         </div>
 
         <nav className="flex-1 space-y-2.5 overflow-y-auto p-4">
-          {DRAWER_ITEMS.map((item) => (
+          {drawerItems.map((item) => (
             <Link
               key={item.label}
               to={item.to}

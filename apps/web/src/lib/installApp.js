@@ -38,10 +38,17 @@ if (typeof window !== "undefined") {
   });
 }
 
+/** whether we are currently running as an installed PWA / standalone shortcut */
+export function isStandalone() {
+  if (typeof window === "undefined") return false;
+  if (window.navigator.standalone === true) return true;
+  return Boolean(window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+}
+
 /** subscribe to install-availability changes; returns an unsubscribe fn */
 export function onInstallState(cb) {
   listeners.add(cb);
-  cb({ canPrompt: Boolean(deferredPrompt), installed });
+  cb({ canPrompt: Boolean(deferredPrompt), installed: installed || isStandalone() });
   return () => listeners.delete(cb);
 }
 
