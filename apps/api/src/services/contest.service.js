@@ -415,6 +415,9 @@ export async function settleContest({ contestId, winnerUserId, settledBy, sessio
   };
   contest.set("winnerUserId", winner.userId);
   contest.transition(CONTEST_STATES.APPROVED, { actor: settledBy, note: "settled" });
+  // settlement resolves any open dispute too — clear the flag so the SLA sweep
+  // never re-discovers this battle as a stale conflict
+  if (contest.conflict?.active) contest.set("conflict.active", false);
   await contest.save({ session });
 
   l.info(
@@ -534,13 +537,26 @@ export async function expireStaleConflicts() {
   let refunded = 0;
   for (const c of stale) {
     try {
-      const out = await withLock(`contest:${c._id}`, () =>
+      let out = null;
+      await withLock(`contest:${c._id}`, () =>
         withTransaction(async (session) => {
           const fresh = await Contest.findOne({ _id: c._id }).session(session);
-          if (!fresh || fresh.settlement?.settledAt || !fresh.conflict?.active) return null;
+          if (!fresh) return null;
+          // Already terminated/settled (or the conflict is gone) — these are
+          // leftover rows from an earlier flow that never cleared the flag.
+          // Un-set it so the sweep stops re-finding the same battle every 60s.
+          if (fresh.settlement?.settledAt || !fresh.conflict?.active) {
+            if (fresh.conflict?.active) {
+              fresh.set("conflict.active", false);
+              await fresh.save({ session });
+              l.info({ contestId: String(fresh._id), status: fresh.status }, "cleared stale conflict flag on settled battle");
+            }
+            return null;
+          }
           const result = await refundAllContest({ contestId: fresh._id, settledBy: "sla", session });
           result.contest.set("conflict.active", false);
           await result.contest.save({ session });
+          out = result;
           return result;
         })
       );
@@ -550,8 +566,8 @@ export async function expireStaleConflicts() {
           const view = out.walletViews?.[String(p.userId)];
           if (view) emitWalletUpdate(p.userId, view);
         }
+        refunded += 1; // only count a genuine refund, not a no-op cleanup
       }
-      refunded += 1;
     } catch (err) {
       l.error({ contestId: String(c._id), err: err.message }, "SLA auto-refund failed");
     }
