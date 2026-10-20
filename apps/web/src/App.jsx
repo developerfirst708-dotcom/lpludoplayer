@@ -19,6 +19,7 @@ import Redeem from "./pages/Redeem.jsx";
 import AppDownload from "./pages/AppDownload.jsx";
 import { Spinner } from "./components/ui.jsx";
 import { NavIcon } from "./components/art.jsx";
+import { onInstallState } from "./lib/installApp.js";
 
 /**
  * App shell reproduced from sample_ui_code/Home_page.txt: a 430px "device"
@@ -55,6 +56,9 @@ function useWalletView() {
 function AppHeader({ onOpenMenu }) {
   const wallet = useWalletView();
   const available = wallet?.availablePaise;
+  // running as an installed PWA shortcut -> no need to install/download again
+  const [standalone, setStandalone] = useState(false);
+  useEffect(() => onInstallState((s) => { if (s.installed) setStandalone(true); }), []);
 
   return (
     <section className="flex items-center gap-2.5 px-4 py-2.5" data-purpose="app-header">
