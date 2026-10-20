@@ -55,6 +55,19 @@ export async function listOpen(req, res) {
   res.json({ items: items.map((c) => contestDto(c, { userId: req.user.id })), total, page, limit });
 }
 
+/**
+ * GET /contests/running — every live battle, visible to all users.
+ * Non-participants get the DTO WITHOUT room codes / result reports (the
+ * participant gate inside contestDto); `players[].isYou` tells the client
+ * whether the viewer is in the battle so the lobby only navigates for them.
+ */
+export async function listRunning(req, res) {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+  const { items, total } = await contestService.listRunningContests({ page, limit });
+  res.json({ items: items.map((c) => contestDto(c, { userId: req.user.id })), total, page, limit });
+}
+
 /** GET /contests/mine */
 export async function listMine(req, res) {
   const page = Math.max(1, Number(req.query.page) || 1);

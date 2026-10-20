@@ -122,6 +122,12 @@ export default function Play() {
     queryFn: () => api("/contests/mine"),
     refetchInterval: 15_000,
   });
+  // every live battle on the platform (not just the viewer's) — via /contests/running
+  const running = useQuery({
+    queryKey: ["contests", "running"],
+    queryFn: () => api("/contests/running"),
+    refetchInterval: 15_000,
+  });
 
   // realtime: socket deltas patch the queries instead of refetch storms (P1/F2)
   useEffect(() => {
@@ -189,9 +195,10 @@ export default function Play() {
   const demoBattles = useMemo(() => makeFakeRunningBattles(hourKey), [hourKey]);
 
   const runningBattles = useMemo(() => {
-    const real = myBattles.filter((c) => RUNNING_STATUSES.includes(c.status));
+    // real battles: everyone's live battles from the global /contests/running
+    const real = (running.data?.items || []).filter((c) => RUNNING_STATUSES.includes(c.status));
 
-    // the player's own battles (the ones showing VIEW) always go on top
+    // the viewer's own battles (the ones showing VIEW) always go on top
     real.sort((a, b) => {
       const aMine = isMine(a) ? 0 : 1;
       const bMine = isMine(b) ? 0 : 1;
@@ -200,11 +207,11 @@ export default function Play() {
     });
 
     // wait for the first real load so the fake list doesn't fight the skeletons
-    if (mine.data === undefined) return real;
+    if (running.data === undefined) return real;
 
     // demo battles fill the rest of the list (after any real ones)
     return [...real, ...demoBattles];
-  }, [myBattles, mine.data, demoBattles]);
+  }, [running.data, demoBattles]);
 
   const previewPaise = useMemo(() => {
     const amt = Number(betstake);
@@ -390,7 +397,7 @@ export default function Play() {
     );
   }
 
-  const loading = open.isLoading || mine.isLoading;
+  const loading = open.isLoading || mine.isLoading || running.isLoading;
 
   return (
     <div className="flex flex-col gap-4">
@@ -473,6 +480,8 @@ export default function Play() {
                   toast.info("This is a demo battle — start your own to play!");
                   return;
                 }
+                // everyone sees the running battle, but only its participants can open it
+                if (!isMine(c)) return;
                 navigate(`/battle/${c.id}`);
               }}
             />

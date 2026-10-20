@@ -10,6 +10,14 @@ const qc = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 10_000, refetchOnWindowFocus: true } },
 });
 
+// Register the service worker (drives the native "Install App" PWA prompt
+// for the shortcut install — replaces the old APK download).
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
+
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <QueryClientProvider client={qc}>

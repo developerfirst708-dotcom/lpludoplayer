@@ -122,6 +122,37 @@ function pick(obj, ...keys) {
 }
 
 /**
+ * True when a gateway status string means "the payment went through".
+ * IMB's live responses are not always exactly `SUCCESS`/`COMPLETED` — some
+ * builds return `TXN_SUCCESS`, `SUCCESSFUL`, `PENDING`… and the top-level
+ * `status` can even be the boolean `true`. Matching on the keyword (instead of
+ * an exact enum) is what keeps a genuinely completed payment from lingering as
+ * `pending` — the amount check below is the real guard against bad credits.
+ */
+function isPositiveStatus(s) {
+  if (s === undefined || s === null || s === "") return false;
+  const v = String(s).trim().toLowerCase();
+  if (v === "true" || v === "1") return true;
+  return /success|complet|approv|paid|credited/i.test(v);
+}
+
+/** a status string that means the transaction definitively did NOT go through */
+function isNegativeStatus(s) {
+  if (s === undefined || s === null || s === "") return false;
+  const v = String(s).trim().toLowerCase();
+  return /fail|expired|cancel|reject|error|false|not.?paid|failed/i.test(v);
+}
+
+/** lenient rupee-amount parsing (tolerates ₹1,000 / "500.00" / numeric) */
+function parseAmountPaise(amountRaw) {
+  if (amountRaw === undefined || amountRaw === null) return null;
+  const cleaned = String(amountRaw).replace(/[^0-9.-]/g, "");
+  if (cleaned === "") return null;
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? Math.round(num * 100) : null;
+}
+
+/**
  * Create a payment order.
  * @returns {{ orderId: string, paymentUrl: string, checkLink: string|null, bhimLink: string|null, raw: object }}
  * @throws {AppError} 502 when the gateway refuses (e.g. "Merchant Not Connected")
@@ -181,26 +212,27 @@ export async function checkOrderStatus(orderId) {
   });
 
   const result = raw?.result && typeof raw.result === "object" ? raw.result : {};
-  const top = str(raw?.status).toUpperCase();
-  const txnStatus = str(pick(result, "txnStatus", "txn_status")).toUpperCase();
-  const resultStatus = str(pick(result, "status")).toUpperCase();
+  const top = str(raw?.status);
+  const txnStatus = str(pick(result, "txnStatus", "txn_status"));
+  const resultStatus = str(pick(result, "status"));
   const message = str(raw?.message);
 
-  const successMarkers = new Set(["SUCCESS", "COMPLETED"]);
-  // documented rule: status=COMPLETED AND result.status=SUCCESS
-  const isSuccess = (top === "COMPLETED" || top === "SUCCESS") &&
-    (successMarkers.has(resultStatus) || successMarkers.has(txnStatus));
-  const isFailed = ["FAILED", "FAILURE", "EXPIRED", "CANCELLED", "CANCELED"].includes(top) ||
-    ["FAILED", "FAILURE"].includes(txnStatus);
+  // Success wins when ANY field reports it (live IMB builds vary); the amount
+  // cross-check in reconcileGatewayDeposit is what actually guards crediting.
+  const isSuccess = isPositiveStatus(top) || isPositiveStatus(resultStatus) || isPositiveStatus(txnStatus);
+  const isFailed = isNegativeStatus(top) || isNegativeStatus(resultStatus) || isNegativeStatus(txnStatus);
+
+  // "Order not found"-style answers stay `unknown`, never failed — they just mean
+  // IMB has not seen the order yet (or the id won), so we keep waiting instead
+  // of wrongly telling the player their payment failed.
+  const isInvalidOrder = /(not found|invalid (order|transaction|id))/i.test(str(raw?.message || ""));
 
   let state = "pending";
   if (isSuccess) state = "success";
+  else if (isInvalidOrder) state = "unknown";
   else if (isFailed) state = "failed";
-  else if (top === "ERROR" || top === "FALSE") state = "unknown"; // e.g. "Order not found" — never a credit decision
 
-  const amountRaw = pick(result, "amount");
-  const amountNum = amountRaw === undefined ? NaN : Number(amountRaw);
-  const amountPaise = Number.isFinite(amountNum) ? Math.round(amountNum * 100) : null;
+  const amountPaise = parseAmountPaise(pick(result, "amount", "amountPaise", "paid") || pick(result, "paid_amount", "paidAmount"));
 
   return {
     state,

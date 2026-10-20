@@ -714,6 +714,27 @@ export async function listMyContests(userId, { page, limit }) {
   return { items, total };
 }
 
+/**
+ * List every battle that is actually live (started and not yet settled), newest
+ * first. Visible to ALL users so the lobby can show "real" running battles from
+ * anywhere — each row carries the participant `isYou` flag so the client can
+ * decide whether clicking it may open the room. Pending join requests
+ * (join_requested) are intentionally excluded: a battle only becomes "running"
+ * once the creator has accepted it.
+ */
+export async function listRunningContests({ page, limit }) {
+  const runningStatuses = Object.values(CONTEST_STATES).filter((s) =>
+    [CONTEST_STATES.RUNNING, CONTEST_STATES.ROOM_SUBMITTED, CONTEST_STATES.RESULT_SUBMITTED, CONTEST_STATES.CANCEL_REQUESTED].includes(s)
+  );
+  const filter = { status: { $in: runningStatuses } };
+  const [items, total] = await Promise.all([
+    Contest.find(filter).sort({ createdAt: -1 }).populate("players.userId", "name")
+      .skip((page - 1) * limit).limit(limit),
+    Contest.countDocuments(filter),
+  ]);
+  return { items, total };
+}
+
 /** Cache helpers for the open list (fixes P2 — bounded, cached, no writes in the read path). */
 
 /** Invalidate the open list cache — called on every write that affects open battles. */

@@ -11,6 +11,7 @@ const router = Router();
 router.use(apiLimiter);
 
 router.get("/open", requireAuth, asyncH(contestController.listOpen));
+router.get("/running", requireAuth, asyncH(contestController.listRunning));
 router.get("/mine", requireAuth, asyncH(contestController.listMine));
 router.post("/", requireAuth, asyncH(contestController.create));
 router.get("/:id", requireAuth, asyncH(contestController.getContest));
