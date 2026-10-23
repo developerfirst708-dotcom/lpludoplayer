@@ -21,13 +21,6 @@ import { Spinner } from "./components/ui.jsx";
 import { NavIcon } from "./components/art.jsx";
 import { onInstallState } from "./lib/installApp.js";
 
-/**
- * App shell reproduced from sample_ui_code/Home_page.txt: a 430px "device"
- * column (centred on desktop, full-bleed on mobile). The header now carries the
- * app logo, the deposit balance chip and the referral (coins) chip plus the
- * navigation drawer with every option the reference sidebar had.
- */
-
 const NAV = [
   { to: "/support", label: "Support", icon: "support" },
   { to: "/refer", label: "Refer", icon: "gift" },
@@ -45,8 +38,6 @@ const DRAWER_ITEMS = [
   { to: "/refer-history", label: "Refer History", icon: "list", tone: "text-teal-600" },
   { to: "/support", label: "Support", icon: "support", tone: "text-rose-600" },
 ];
-// "App Download" is added back in the drawer unless we are already running as an
-// installed PWA shortcut (no point offering an install for an installed app).
 
 function useWalletView() {
   const { data } = useQuery({ queryKey: ["wallet"], queryFn: () => api("/wallet") });
@@ -56,7 +47,6 @@ function useWalletView() {
 function AppHeader({ onOpenMenu }) {
   const wallet = useWalletView();
   const available = wallet?.availablePaise;
-  // running as an installed PWA shortcut -> no need to install/download again
   const [standalone, setStandalone] = useState(false);
   useEffect(() => onInstallState((s) => { if (s.installed) setStandalone(true); }), []);
 
@@ -78,18 +68,33 @@ function AppHeader({ onOpenMenu }) {
       </Link>
 
       <div className="ml-auto flex items-center gap-1.5">
-        {/* app download — hidden once the PWA is installed / running standalone */}
+        {/* Updated Cream/Green Download Button */}
         {!standalone && (
-          <a
-            href="/app-download"
+          <Link
+            to="/app-download"
             aria-label="Download the app"
             title="Download the app"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm transition-all active:scale-95"
+            className="inline-flex items-center gap-1.5 rounded-full border-2 border-[#1E1E1E] bg-[#FEF0B6] p-1 pr-3 shadow-sm transition-all hover:brightness-95 active:scale-95"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4.5-4.5M12 16l4.5-4.5M4 20h16" />
-            </svg>
-          </a>
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#48C79C]">
+              <svg
+                className="h-3.5 w-3.5 text-white"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M7.5 12l4.5 4.5m0 0l4.5-4.5M12 16.5V3"
+                />
+              </svg>
+            </div>
+            <span className="text-xs font-black text-[#1E1E1E]">
+              Download
+            </span>
+          </Link>
         )}
 
         {/* deposit balance */}
@@ -121,12 +126,11 @@ function AppHeader({ onOpenMenu }) {
 }
 
 function Drawer({ open, onClose }) {
-  // hide the "App Download" entry when running as an installed PWA shortcut
   const [standalone, setStandalone] = useState(false);
   useEffect(() => onInstallState((s) => { if (s.installed) setStandalone(true); }), []);
   const drawerItems = standalone
     ? DRAWER_ITEMS
-    : [...DRAWER_ITEMS, { to: "/app-download", label: "App Download", icon: "download", tone: "text-sky-600" }];
+    : [...DRAWER_ITEMS, { to: "/app-download", label: "App Download", icon: "download", tone: "text-[#48C79C]" }];
 
   return (
     <>
@@ -186,7 +190,6 @@ function Drawer({ open, onClose }) {
   );
 }
 
-/** WhatsApp brand glyph, used by the floating support button. */
 function WhatsAppIcon({ className = "h-5 w-5" }) {
   return (
     <svg className={`fill-current ${className}`} viewBox="0 0 24 24" aria-hidden="true">
@@ -195,7 +198,6 @@ function WhatsAppIcon({ className = "h-5 w-5" }) {
   );
 }
 
-/** Floating WhatsApp support bubble pinned to the bottom-right corner. */
 function FloatingWhatsApp() {
   const settings = useQuery({
     queryKey: ["settings", "public"],
@@ -204,13 +206,11 @@ function FloatingWhatsApp() {
   });
 
   const number = settings.data?.supportWhatsapp || null;
-  if (!number) return null; // hidden until an admin sets the support number
+  if (!number) return null;
 
   const waLink = `https://wa.me/${number.replace(/^\+/, "")}?text=${encodeURIComponent("Hello LPLUDO support, I need help with my account.")}`;
 
   return (
-    // fixed to the viewport (never scrolls away) but aligned to the right edge
-    // of the centered 430px app column — same centering trick as BottomNav
     <div className="pointer-events-none fixed inset-x-0 bottom-20 z-30 flex justify-center">
       <div className="pointer-events-auto w-full max-w-[430px] px-4">
         <a
