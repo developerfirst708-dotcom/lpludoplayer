@@ -4,9 +4,7 @@ import { Panel } from "../components/ui.jsx";
 import { onInstallState, canInstall, promptInstall, isStandalone } from "../lib/installApp.js";
 
 /**
- * App Download — installs the PWA shortcut instead of a real APK.
- * Clicking the button shows the browser's native "Install app / Add to Home
- * Screen" dialog (driven by beforeinstallprompt + the service worker).
+ * App Download — installs the PWA shortcut / app.
  */
 const isIOS = () =>
   /iphone|ipad|ipod/i.test(navigator.userAgent) &&
@@ -23,10 +21,9 @@ export default function AppDownload() {
   async function handleInstall() {
     setBusy(true);
     try {
-      // wait one tick so the service worker update / installability is settled
       if (deferredNotReady()) await new Promise((r) => setTimeout(r, 400));
       const shown = await promptInstall();
-      if (shown) return; // the native dialog appeared
+      if (shown) return; // Native dialog appeared
       if (state.installed) {
         setHint("The app is already installed on this device.");
       } else if (isIOS()) {
@@ -39,7 +36,6 @@ export default function AppDownload() {
     }
   }
 
-  // beforeinstallprompt often fires a beat after we capture state — re-check once
   function deferredNotReady() {
     return !canInstall() && !state.installed;
   }
@@ -59,9 +55,29 @@ export default function AppDownload() {
               type="button"
               onClick={handleInstall}
               disabled={busy}
-              className="mt-1 inline-flex items-center gap-2 rounded-full bg-[#25D366] px-6 py-3 text-sm font-extrabold uppercase tracking-wide text-white shadow-md shadow-emerald-500/30 transition-all hover:bg-[#20bd5a] active:scale-95 disabled:opacity-60"
+              className="mt-2 inline-flex items-center gap-2.5 rounded-full border-2 border-[#1E1E1E] bg-[#FEF0B6] p-1.5 pr-6 shadow-md transition-all hover:brightness-95 active:scale-95 disabled:opacity-60"
             >
-              {busy ? "Preparing…" : "Download App"}
+              {/* Green Circle Badge with Download Icon */}
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#48C79C]">
+                <svg
+                  className="h-4 w-4 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M7.5 12l4.5 4.5m0 0l4.5-4.5M12 16.5V3"
+                  />
+                </svg>
+              </div>
+
+              {/* Text Label */}
+              <span className="text-sm font-black text-[#1E1E1E]">
+                {busy ? "Preparing…" : "Download"}
+              </span>
             </button>
           )}
 
