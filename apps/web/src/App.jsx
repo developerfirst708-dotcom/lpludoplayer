@@ -51,12 +51,12 @@ function AppHeader({ onOpenMenu }) {
   useEffect(() => onInstallState((s) => { if (s.installed) setStandalone(true); }), []);
 
   return (
-    <section className="flex items-center gap-2.5 px-4 py-2.5" data-purpose="app-header">
+    <section className="flex items-center gap-2 px-3 py-2" data-purpose="app-header">
       <button
         type="button"
         onClick={onOpenMenu}
         aria-label="Open menu"
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-800 transition-colors hover:bg-gray-100 active:scale-95"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-slate-800 transition-colors hover:bg-gray-100 active:scale-95"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 stroke-current" fill="none" viewBox="0 0 24 24" strokeWidth="2.5">
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
@@ -64,21 +64,21 @@ function AppHeader({ onOpenMenu }) {
       </button>
 
       <Link to="/" aria-label="LPLUDO home" className="flex items-center transition-transform active:scale-95">
-        <img src="/logo.png" alt="LPLUDO" className="h-9 w-auto max-w-[130px] object-contain" />
+        <img src="/logo.png" alt="LPLUDO" className="h-8 w-auto max-w-[110px] object-contain" />
       </Link>
 
       <div className="ml-auto flex items-center gap-1.5">
-        {/* Updated Cream/Green Download Button */}
+        {/* Animated & Smaller Cream Download Button */}
         {!standalone && (
           <Link
             to="/app-download"
             aria-label="Download the app"
             title="Download the app"
-            className="inline-flex items-center gap-1.5 rounded-full border-2 border-[#1E1E1E] bg-[#FEF0B6] p-1 pr-3 shadow-sm transition-all hover:brightness-95 active:scale-95"
+            className="inline-flex items-center gap-1 rounded-full border-1.5 border-[#1E1E1E] bg-[#FEF0B6] p-0.5 pr-2.5 shadow-sm transition-all animate-pulse hover:brightness-95 active:scale-95"
           >
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#48C79C]">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#48C79C]">
               <svg
-                className="h-3.5 w-3.5 text-white"
+                className="h-3 w-3 text-white"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2.5"
@@ -91,7 +91,7 @@ function AppHeader({ onOpenMenu }) {
                 />
               </svg>
             </div>
-            <span className="text-xs font-black text-[#1E1E1E]">
+            <span className="text-[10px] font-black text-[#1E1E1E]">
               Download
             </span>
           </Link>
@@ -101,10 +101,10 @@ function AppHeader({ onOpenMenu }) {
         <Link
           to="/wallet"
           aria-label="Wallet balance"
-          className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-gray-50 px-2.5 py-1 shadow-sm transition-transform active:scale-95"
+          className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 px-2 py-1 shadow-sm transition-transform active:scale-95"
         >
-          <span className="text-sm leading-none">💵</span>
-          <span className="text-sm font-extrabold tracking-wide text-slate-900">
+          <span className="text-xs leading-none">💵</span>
+          <span className="text-xs font-extrabold tracking-wide text-slate-900">
             {available === undefined ? "—" : formatPaise(available, { withSymbol: false })}
           </span>
         </Link>
@@ -113,10 +113,10 @@ function AppHeader({ onOpenMenu }) {
         <Link
           to="/redeem"
           aria-label="Referral balance"
-          className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-gray-50 px-2.5 py-1 shadow-sm transition-transform active:scale-95"
+          className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 px-2 py-1 shadow-sm transition-transform active:scale-95"
         >
-          <span className="text-sm leading-none">🪙</span>
-          <span className="text-sm font-extrabold tracking-wide text-slate-900">
+          <span className="text-xs leading-none">🪙</span>
+          <span className="text-xs font-extrabold tracking-wide text-slate-900">
             {formatPaise(wallet?.referralPaise ?? 0, { withSymbol: false })}
           </span>
         </Link>
