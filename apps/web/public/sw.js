@@ -6,7 +6,7 @@
  * stale-while-revalidate cache for the static app shell so the PWA opens fast.
  * Never cache responses for /api/* or /socket.io/ so balances/sockets are live.
  */
-const SHELL_CACHE = "lpludo-shell-v1";
+const SHELL_CACHE = "lpludo-shell-v2"; // bumped for the maintenance rollout — old cached app shells are flushed on activate
 const CORE_ASSETS = [
   "/",
   "/index.html",
